@@ -7,6 +7,8 @@ import { comandoDePreparo, pedidoDeAdicionar, TEXTO_DE_AJUDA } from './receita'
 import { ACOES, ACOES_PADRAO, ALTURA_MEME, ALTURA_PERGUNTA, LARGURA_PREVIA, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, NOME_DA_ACAO, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta, svgNoPainel } from './sorteio'
 import type { MemeIndice } from './sorteio'
 import { SUGESTOES, acharSugestao } from './sugestoes'
+import { MODOS_TERMINAL, NOME_DO_MODO, animacaoDePixels, gatoDoTerminal, memeDoTerminal } from './terminal'
+import type { AnimacaoTerminal, ModoTerminal, PixelsTerminal } from './terminal'
 
 const atual = atom({ plugin: 'meme', key: 'atual' } as const, 'pensando' as Nome, { shape: 'atual-1' })
 const ferramenta = atom({ plugin: 'meme', key: 'ferramenta' } as const, null as string | null, { shape: 'ferramenta-1' })
@@ -20,6 +22,7 @@ const preparo = atom({ plugin: 'meme', key: 'preparo' } as const, PREPARO_VAZIO,
 const aberto = atom({ plugin: 'meme', key: 'aberto' } as const, null as string | null, { shape: 'aberto-1' })
 // A tela de memes que o painel mostra.
 const tela = atom({ plugin: 'meme', key: 'tela' } as const, 0, { shape: 'tela-1' })
+const modoTerminal = atom({ plugin: 'meme', key: 'modoTerminal' } as const, 'desenho' as ModoTerminal, { shape: 'modo-terminal-1' })
 
 const PAINEL = 'memes'
 const TEMPO_POR_MEME = 180_000
@@ -27,7 +30,11 @@ const PROGRAMAS_NECESSARIOS = [['node', '--version'], ['ffmpeg', '-version'], ['
 // Onde o gatinho fica na faixa esticada acima da pergunta, para cair no meio do cartão, que é mais estreito que a faixa.
 const POSICAO_ESPERANDO = 104
 
-type Dados = { gif: string; pergunta: string | null }
+type Dados = { gif: string; pergunta: string | null; terminal?: AnimacaoTerminal | null }
+
+const CHAVE_DO_DESENHO = 'animacao'
+// A animação que está tocando no terminal. O relógio troca as células sem redesenhar a tela.
+let tocando: { chave: string; quadro: number; parar: () => void } | null = null
 
 // A fase mais recente, que só a linha normal conhece. Desenhar não pode gravar estado, por isso fica aqui.
 let ultimaFase: string | null = null
@@ -47,7 +54,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'meme',
       description: 'Abre o painel de memes; também: adicionar, remover, acoes, lista, sugestoes e cor',
-      argumentHint: 'adicionar <nome ou link> | remover <nome> | acoes <nome> <ações> | lista | sugestoes | cor <laranja ou cinza>',
+      argumentHint: 'adicionar <nome ou link> | remover <nome> | acoes <nome> <ações> | lista | sugestoes | cor <laranja ou cinza> | terminal <desenho, texto ou original>',
     })
     await $.tool.register({
       name: 'guardar',
@@ -73,6 +80,9 @@ export const register: Register = on => {
     const preferida = await $.store.get('cor')
     const corValida = CORES_GATO.find(c => c === preferida)
     if (corValida) await update($, cor, () => corValida)
+    const modoPreferido = await $.store.get('modoTerminal')
+    const modoValido = MODOS_TERMINAL.find(m => m === modoPreferido)
+    if (modoValido) await update($, modoTerminal, () => modoValido)
     await update($, preparo, () => PREPARO_VAZIO)
 
     // Na primeira vez, o painel se apresenta com as sugestões.
@@ -103,6 +113,16 @@ export const register: Register = on => {
       dados = {
         gif: await lerGif(m.arquivo, m.largura, ALTURA_MEME),
         pergunta: temPergunta ? await lerGif(m.arquivoPergunta as string, m.larguraPergunta as number, ALTURA_PERGUNTA) : null,
+        terminal: null,
+      }
+      // A versão do terminal é um extra: se falhar, o meme continua valendo no app.
+      if (acharSugestao(nome)?.terminal) {
+        try {
+          const r = await $.process.run(['node', `${$.plugin.root}/receita/terminal.mjs`, '--entrada', m.arquivo], { timeoutMs: TEMPO_POR_MEME })
+          if (r.exitCode === 0) dados = { ...dados, terminal: animacaoDePixels(`meme-${nome}`, JSON.parse(r.stdout) as PixelsTerminal) }
+        } catch {
+          dados = { ...dados, terminal: null }
+        }
       }
       await $.store.set(`meme:${nome}`, dados)
     } catch (erro) {
@@ -117,8 +137,9 @@ export const register: Register = on => {
       acoes,
       peso: typeof m.peso === 'number' && m.peso >= 1 ? Math.floor(m.peso) : 1,
       larguraPergunta: dados.pergunta ? (m.larguraPergunta as number) : null,
+      temTerminal: Boolean(dados.terminal),
     }
-    const lista = [...(await read($, indice)).filter(x => x.nome !== nome), novo]
+    const lista =[...(await read($, indice)).filter(x => x.nome !== nome), novo]
     await $.store.set('indice', lista)
     await update($, indice, () => lista)
     lidos.set(nome, dados)
@@ -176,6 +197,14 @@ export const register: Register = on => {
       await update($, cor, () => novaCor)
 
       return { text: `Gatinho ${novaCor}.` }
+    }
+    if (pedido === 'terminal') {
+      const novoModo = MODOS_TERMINAL.find(m => m === resto[0])
+      if (!novoModo) return { text: `Use: /meme terminal ${MODOS_TERMINAL.join(', ')}` }
+      await $.store.set('modoTerminal', novoModo)
+      await update($, modoTerminal, () => novoModo)
+
+      return { text: `No terminal: ${NOME_DO_MODO[novoModo]}.` }
     }
     if (pedido) return { text: TEXTO_DE_AJUDA }
 
@@ -256,7 +285,55 @@ export const register: Register = on => {
 
   // A linha de status: um meme marcado para a ação da vez ou, sem nenhum, um gatinho em pixel.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    // O terminal não desenha SVG: lá fica a animação original.
+    // O terminal não desenha SVG: lá o desenho é uma grade de caracteres, ao lado da linha original com tempo e tokens.
+    if (e.surface === 'terminal') {
+      const modo = await read($, modoTerminal)
+      if (modo === 'original') {
+        return next(e)
+      }
+      const original = await next(e)
+      const { Box, Raster } = $.ui.resolve(e)
+      const s = await read($, semente)
+      let animacao = gatoDoTerminal(modo, await read($, cor), s)
+      if (modo === 'desenho') {
+        const meme = memeDoTerminal((await read($, indice)).filter(m => m.temTerminal), s)
+        let dados = meme ? lidos.get(meme.nome) : undefined
+        if (meme && !dados) {
+          dados = (await $.store.get(`meme:${meme.nome}`)) as Dados | undefined
+          if (dados) lidos.set(meme.nome, dados)
+        }
+        if (dados?.terminal) animacao = dados.terminal
+      }
+      const atual = animacao
+      if (tocando?.chave !== atual.chave) {
+        tocando?.parar()
+        tocando = null
+        if (atual.quadros.length > 1) {
+          const { requestId } = e
+          const estado = { chave: atual.chave, quadro: 0, parar: () => {} }
+          const relogio = $.clock.every(atual.ms, () => {
+            estado.quadro = (estado.quadro + 1) % atual.quadros.length
+            // Quando a linha sai da tela, o app recusa a troca: é a hora de parar o relógio.
+            void $.ui.blit({ requestId, key: CHAVE_DO_DESENHO, cells: atual.quadros[estado.quadro] ?? '' }).then(
+              r => { if ('deny' in r && r.deny) estado.parar() },
+              () => estado.parar(),
+            )
+          })
+          estado.parar = () => {
+            relogio.cancel()
+            if (tocando === estado) tocando = null
+          }
+          tocando = estado
+        }
+      }
+
+      return (
+        <Box flexDirection="row" alignItems="center" gap={1}>
+          <Raster key={CHAVE_DO_DESENHO} columns={atual.colunas} rows={atual.linhas} cells={atual.quadros[tocando?.chave === atual.chave ? tocando.quadro : 0] ?? ''} />
+          {original}
+        </Box>
+      )
+    }
     if (e.surface !== 'desktop') {
       return next(e)
     }
@@ -322,6 +399,7 @@ export const register: Register = on => {
     const andamento = await read($, preparo)
     const memeAberto = await read($, aberto)
     const corAtual = await read($, cor)
+    const modoAtual = await read($, modoTerminal)
     const processados = andamento.feitos + andamento.falhas.length
     const pronto = andamento.total > 0 ? Math.round((processados / andamento.total) * 100) : 0
     const previas = new Map<string, string>()
@@ -381,11 +459,11 @@ export const register: Register = on => {
                     try {
                       const r = await $.process.run(comandoDePreparo(s, $.plugin.root), { timeoutMs: TEMPO_POR_MEME })
                       if (r.exitCode !== 0) throw new Error(r.stderr.trim())
-                      const pronto = JSON.parse(r.stdout) as { gif: string; largura: number; pergunta: string | null; larguraPergunta: number | null }
+                      const pronto = JSON.parse(r.stdout) as { gif: string; largura: number; pergunta: string | null; larguraPergunta: number | null; terminal?: PixelsTerminal | null }
                       if (!ehGif(pronto.gif) || svgDoGif(pronto.gif, pronto.largura).length > LIMITE_DESENHO) throw new Error('o desenho não serve')
-                      const dados: Dados = { gif: pronto.gif, pergunta: pronto.pergunta }
+                      const dados: Dados = { gif: pronto.gif, pergunta: pronto.pergunta, terminal: pronto.terminal ? animacaoDePixels(`meme-${s.nome}`, pronto.terminal) : null }
                       await $.store.set(`meme:${s.nome}`, dados)
-                      const novo: MemeIndice = { nome: s.nome, titulo: s.titulo, largura: pronto.largura, acoes: acoesValidas([...s.acoes]), peso: s.peso ?? 1, larguraPergunta: pronto.larguraPergunta }
+                      const novo: MemeIndice = { nome: s.nome, titulo: s.titulo, largura: pronto.largura, acoes: acoesValidas([...s.acoes]), peso: s.peso ?? 1, larguraPergunta: pronto.larguraPergunta, temTerminal: Boolean(dados.terminal) }
                       const novaLista = [...(await read($, indice)).filter(x => x.nome !== s.nome), novo]
                       await $.store.set('indice', novaLista)
                       await update($, indice, () => novaLista)
@@ -527,6 +605,24 @@ export const register: Register = on => {
               }}
             />
           ))}
+        </Box>
+
+        <Box flexDirection="column" gap="xs">
+          <Box flexDirection="row" alignItems="center" gap="sm" flexWrap="wrap">
+            <Text size="caption" dimColor>No terminal</Text>
+            {MODOS_TERMINAL.map(m => (
+              <Button
+                key={`terminal-${m}`}
+                variant={m === modoAtual ? 'primary' : 'secondary'}
+                label={`${m === modoAtual ? '✓ ' : ''}${NOME_DO_MODO[m]}`}
+                onPress={async () => {
+                  await $.store.set('modoTerminal', m)
+                  await update($, modoTerminal, () => m)
+                }}
+              />
+            ))}
+          </Box>
+          <Text size="caption" dimColor>Desenho usa 6 linhas e sorteia a cada mensagem, com Bongo Cat e Pop Cat se você os tiver. Texto usa 1 linha, para a tela não subir.</Text>
         </Box>
       </Box>
     )

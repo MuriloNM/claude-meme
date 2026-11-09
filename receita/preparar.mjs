@@ -89,7 +89,14 @@ try {
   const grande = larguraPergunta
     ? recortar(entrada, join(pasta, 'grande.gif'), 64, larguraPergunta, Number(opcao('fps-pergunta', '6')))
     : null
-  console.log(JSON.stringify({ gif: pequeno.base64, largura: pequeno.largura, pergunta: grande?.base64 ?? null, larguraPergunta: grande?.largura ?? null }))
+  // A versão do terminal é um extra: se falhar, o meme continua valendo no app.
+  let terminal = null
+  if (args.includes('--terminal')) {
+    const script = join(dirname(fileURLToPath(import.meta.url)), 'terminal.mjs')
+    const r = spawnSync(process.execPath, [script, '--entrada', join(pasta, 'pronto.gif')], { encoding: 'utf8', maxBuffer: 1 << 24 })
+    if (r.status === 0) terminal = JSON.parse(r.stdout)
+  }
+  console.log(JSON.stringify({ gif: pequeno.base64, largura: pequeno.largura, pergunta: grande?.base64 ?? null, larguraPergunta: grande?.largura ?? null, terminal }))
 } catch (erro) {
   // Sem process.exit aqui: depois de usar a rede, ele derruba o Node no Windows.
   console.error(erro instanceof Error ? erro.message : String(erro))

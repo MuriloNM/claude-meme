@@ -5,6 +5,7 @@ import { FERRAMENTA_GUARDAR, comandoDePreparo, pedidoDeAdicionar } from './recei
 import { ACOES, ACOES_PADRAO, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta } from './sorteio'
 import type { MemeIndice } from './sorteio'
 import { SUGESTOES, acharSugestao } from './sugestoes'
+import { DESENHOS, TEXTOS, animacaoDePixels, celulasDePixels, desenhoDoTerminal, gatoDoTerminal, memeDoTerminal, textoDoTerminal } from './terminal'
 
 const SPINNER = {
   plugin: 'meme',
@@ -259,4 +260,117 @@ test('com muitos memes, cada tela do painel leva só o que cabe, e o botão most
   expect(await ui.find({ key: 'ajustar-c' })).toBeDefined()
   expect(await ui.find({ key: 'tela-anterior' })).toBeDefined()
   await ui.unmount()
+})
+
+const SPINNER_NO_TERMINAL = { ...SPINNER, requestId: 'linha', surface: 'terminal' } as const
+
+test('os pixels viram meio-blocos com as duas cores, e o vazio fica com o fundo do terminal', () => {
+  // Um caractere, 2 pixels: frente vermelha, fundo azul. Três números de 32 bits.
+  expect(celulasDePixels([0xff0000, 0x0000ff], 1, 2)).toBe('gCUAAAAA/wD/AAAA')
+  // Só o de baixo: meio-bloco de baixo, e o fundo fica o do terminal.
+  expect(celulasDePixels([null, 0x00ff00], 1, 2)).toBe('hCUAAAD/AAAAAAAB')
+  // Nada: espaço, com as duas cores do terminal.
+  expect(celulasDePixels([null, null], 1, 2)).toBe('IAAAAAAAAAEAAAAB')
+})
+
+test('os gatinhos do terminal têm 24 por 12 pixels em todos os quadros, e as células batem com o tamanho', () => {
+  for (const [nome, d] of Object.entries(DESENHOS)) {
+    for (const q of d.quadros) {
+      expect(q.length).toBe(12)
+      for (const linha of q) expect(linha.length).toBe(24)
+    }
+    const a = desenhoDoTerminal(nome, 'laranja')
+    expect(a.linhas).toBe(6)
+    // 12 bytes por caractere, em base64: 16 caracteres.
+    expect(a.quadros[0]?.length).toBe(24 * 6 * 16)
+    expect(desenhoDoTerminal(nome, 'cinza').quadros[0]).not.toBe(a.quadros[0])
+  }
+  for (const [nome, t] of Object.entries(TEXTOS)) {
+    const larguras = new Set(t.quadros.map(q => q.length))
+    expect(larguras.size).toBe(1)
+    expect(textoDoTerminal(nome, 'laranja').linhas).toBe(1)
+  }
+})
+
+test('o gatinho da mensagem não muda com a ação, e o modo decide o tamanho', () => {
+  expect(gatoDoTerminal('desenho', 'laranja', 7).chave).toBe(gatoDoTerminal('desenho', 'laranja', 7).chave)
+  expect(gatoDoTerminal('desenho', 'laranja', 7).linhas).toBe(6)
+  expect(gatoDoTerminal('texto', 'laranja', 7).linhas).toBe(1)
+})
+
+test('os pixels de um meme viram animação do terminal', () => {
+  const a = animacaoDePixels('meme-x', { l: 2, a: 2, ms: 100, quadros: [['ff0000', '', '', '00ff00'], ['', '', '', '']] })
+  expect(a).toMatchObject({ chave: 'meme-x', colunas: 2, linhas: 1, ms: 100 })
+  expect(a.quadros.length).toBe(2)
+})
+
+test('o preparo pede a versão do terminal só para os memes que ficam bons nela', () => {
+  const bongo = acharSugestao('bongo')
+  const nazare = acharSugestao('nazare')
+  if (!bongo || !nazare) throw new Error('faltou sugestão')
+  expect(comandoDePreparo(bongo, '/raiz')).toContain('--terminal')
+  expect(comandoDePreparo(nazare, '/raiz')).not.toContain('--terminal')
+  expect(SUGESTOES.filter(s => s.terminal).map(s => s.nome).sort()).toEqual(['bongo', 'pop'])
+})
+
+test('no terminal, o desenho entra ao lado da linha original', async ($, on) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>original</Text>
+  })
+  const ui = await $.ui.mount(SPINNER_NO_TERMINAL)
+  expect(await ui.find({ type: 'Raster' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /original/ }))?.text).toBe('original')
+  await ui.unmount()
+})
+
+test('no modo original, o terminal fica sem desenho', async ($, on) => {
+  on('command.register', () => ({ value: { command: 'meme' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__meme__guardar' } }))
+  on('store.get', (_, e) => ({ value: e.key === 'apresentado' ? true : e.key === 'modoTerminal' ? 'original' : undefined }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>original</Text>
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(SPINNER_NO_TERMINAL)
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /original/ }))?.text).toBe('original')
+  await ui.unmount()
+})
+
+test('um meme com versão do terminal entra no sorteio de lá; sem ela, fica o gatinho', async ($, on) => {
+  const meme6 = { chave: 'meme-bongo', colunas: 2, linhas: 1, ms: 100, quadros: ['IAAAAAAAAAEAAAABIAAAAAAAAAEAAAAB', 'IAAAAAAAAAEAAAABIAAAAAAAAAEAAAAB'] }
+  const guardados = new Map<string, unknown>([
+    ['apresentado', true],
+    ['indice', [{ ...meme('bongo', ['pensando']), temTerminal: true }, meme('nazare', ['pensando'], 50)]],
+    ['meme:bongo', { gif: 'R0lGOD', pergunta: null, terminal: meme6 }],
+    ['meme:nazare', { gif: 'R0lGOD', pergunta: null }],
+  ])
+  on('command.register', () => ({ value: { command: 'meme' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__meme__guardar' } }))
+  on('store.get', (_, e) => ({ value: guardados.get(e.key) }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>original</Text>
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(SPINNER_NO_TERMINAL)
+  const r = (await ui.find({ type: 'Raster' })) as { props?: { columns?: number } } | undefined
+  expect(r).toBeDefined()
+  await ui.unmount()
+})
+
+test('no terminal, o sorteio mistura gatinhos e memes, e sem meme sai sempre gatinho', () => {
+  expect(memeDoTerminal([], 123)).toBe(null)
+  const saiu = Array.from({ length: 600 }, (_, n) => memeDoTerminal(['bongo', 'pop'], n))
+  expect(saiu.filter(m => m === 'bongo').length).toBe(100)
+  expect(saiu.filter(m => m === 'pop').length).toBe(100)
+  expect(saiu.filter(m => m === null).length).toBe(400)
+  expect(memeDoTerminal(['bongo', 'pop'], 7)).toBe(memeDoTerminal(['bongo', 'pop'], 7))
 })

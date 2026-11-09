@@ -6,7 +6,8 @@ declare module 'claude-code' {
       semente: Shaped<number>
       vezDaPergunta: Shaped<number>
       cor: Shaped<'laranja' | 'cinza'>
-      indice: Shaped<{ nome: string; titulo: string; largura: number; acoes: string[]; peso: number; larguraPergunta: number | null }[]>
+      indice: Shaped<{ nome: string; titulo: string; largura: number; acoes: string[]; peso: number; larguraPergunta: number | null; temTerminal?: boolean }[]>
+      modoTerminal: Shaped<'desenho' | 'texto' | 'original'>
       aberto: Shaped<string | null>
       tela: Shaped<number>
       preparo: Shaped<{ atual: string | null; feitos: number; total: number; falhas: string[]; faltando: string[] }>

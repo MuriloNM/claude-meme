@@ -23,6 +23,8 @@ export type MemeIndice = {
   acoes: string[]
   peso: number
   larguraPergunta: number | null
+  // Tem versão para o terminal. Memes guardados antes dela não trazem este campo.
+  temTerminal?: boolean
 }
 
 // A altura da linha de cima e o maior desenho que o app aceita.

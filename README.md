@@ -1,6 +1,6 @@
 # claude-meme
 
-Mod do Claude Code que troca as bolinhas de trabalho no app desktop por gatinhos em pixel e pelos memes que você escolher.
+Mod do Claude Code que troca as bolinhas de trabalho por gatinhos em pixel e pelos memes que você escolher, no app desktop e no terminal.
 
 ## Instalar
 
@@ -35,10 +35,19 @@ O botão **Adicionar** de cada sugestão e o comando `/meme adicionar` pedem ao 
 | `/meme acoes <nome> <ações>` | Escolhe quando ele aparece |
 | `/meme lista` | Mostra seus memes |
 | `/meme cor <laranja ou cinza>` | Muda a cor do gatinho em pixel |
+| `/meme terminal <desenho, texto ou original>` | Escolhe o que aparece no terminal |
 
 As ações são `enviando`, `pensando`, `escrevendo`, `comando`, `lendo` e `editando`. Quando mais de um meme está na mesma ação, sai um por sorteio. Sem nenhum meme na ação, aparece um gatinho em pixel.
 
-Na linha com tempo e seta, no selo de espera e nos pedidos de permissão continua o desenho do próprio app, porque o mod não alcança esses lugares. No terminal, a animação original fica como está.
+Na linha com tempo e seta, no selo de espera e nos pedidos de permissão continua o desenho do próprio app, porque o mod não alcança esses lugares.
+
+## No terminal
+
+O terminal não mostra GIF, então o mod desenha com caracteres coloridos, ao lado da linha com tempo e tokens:
+
+- **Desenho** (padrão): gatinhos em 6 linhas, sorteados a cada mensagem. Bongo Cat e Pop Cat entram no sorteio se você os adicionou, porque continuam legíveis nesse tamanho. As ações escolhidas no painel valem só no app.
+- **Texto**: um gatinho de caracteres em 1 linha, como `=^.^=`, para a tela não subir enquanto o Claude trabalha.
+- **Original**: a animação do próprio Claude Code.
 
 ## Direitos dos memes
 

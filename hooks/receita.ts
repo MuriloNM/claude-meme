@@ -44,6 +44,7 @@ export function comandoDePreparo(s: Sugestao, raiz: string): string[] {
     '--limite',
     String(LIMITE_DESENHO),
     ...opcoes.flatMap(([nome, valor]) => (valor === undefined ? [] : [`--${nome}`, String(valor)])),
+    ...(s.terminal ? ['--terminal'] : []),
   ]
 }
 
@@ -54,4 +55,5 @@ export const TEXTO_DE_AJUDA = `Memes
 /meme remover <nome>: tira um meme
 /meme acoes <nome> <ações>: escolhe quando ele aparece (${ACOES.join(', ')})
 /meme lista: mostra seus memes
-/meme cor <laranja ou cinza>: muda a cor do gatinho em pixel`
+/meme cor <laranja ou cinza>: muda a cor do gatinho em pixel
+/meme terminal <desenho, texto ou original>: escolhe o que aparece no terminal`
