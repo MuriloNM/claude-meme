@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { ALTURA, LARGURA, LARGURA_PEQUENA, NOMES, PEQUENAS_PIXEL, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa } from './animacoes'
+import { acharProgramas, nomesParaInstalar, pastasAtuais } from './programas'
 import { FERRAMENTA_GUARDAR, comandoDePreparo, pedidoDeAdicionar } from './receita'
 import { ACOES, ACOES_PADRAO, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta } from './sorteio'
 import type { MemeIndice } from './sorteio'
@@ -157,6 +158,11 @@ const PAINEL = {
 } as const
 
 // O trabalho do botão segue depois do clique: espera o painel mostrar o resultado.
+const saida = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+// Responde à busca dos programas, fora do Windows, sem os que `faltam`.
+const buscaDePrograma = (argv: readonly string[], faltam: readonly string[] = []) =>
+  argv[0] === '/bin/sh' && argv[1] === '-c' ? (faltam.includes(argv[argv.length - 1] ?? '') ? saida('', 1) : saida(`/bin/${argv[argv.length - 1]}`)) : undefined
+
 async function esperarTexto(ui: { find: (q: { type: 'Text'; text: RegExp }) => Promise<unknown> }, texto: RegExp): Promise<void> {
   for (let i = 0; i < 2000; i++) if (await ui.find({ type: 'Text', text: texto })) return
   throw new Error(`o painel não mostrou ${texto}`)
@@ -166,9 +172,13 @@ test('adicionar todos prepara as sugestões, guarda as que deram certo e aponta 
   const guardados = new Map<string, unknown>()
   on('store.set', (_, e) => { guardados.set(e.key, e.value); return { value: undefined } })
   on('store.get', (_, e) => ({ value: guardados.get(e.key) }))
+  on('env.get', () => ({ value: undefined }))
   on('process.run', (_, e) => {
     const argv = e.argv as readonly string[]
-    if (argv[0] !== 'node' || argv[1] === '--version') return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const busca = buscaDePrograma(argv)
+    if (busca) return busca
+    if (!argv[1]?.endsWith('preparar.mjs')) return saida('')
+    expect(argv[0]).toBe('/bin/node')
     if (argv.includes(acharSugestao('fofo')?.link ?? 'faltou')) return { value: { exitCode: 1, stdout: '', stderr: 'o link não levou a um GIF ou vídeo', isStdoutTruncated: false, isStderrTruncated: false } }
     return { value: { exitCode: 0, stdout: JSON.stringify({ gif: 'R0lGODlh', largura: 30, pergunta: null, larguraPergunta: null }), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -189,19 +199,91 @@ test('adicionar todos prepara as sugestões, guarda as que deram certo e aponta 
 
 test('sem o ffmpeg, adicionar todos avisa o que falta e não baixa nada', async ($, on) => {
   const chamados: string[] = []
+  on('env.get', () => ({ value: undefined }))
   on('process.run', (_, e) => {
     const argv = e.argv as readonly string[]
     chamados.push(argv.join(' '))
-    if (argv[0] === 'ffmpeg') throw new Error('não encontrado')
-    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return buscaDePrograma(argv, ['ffmpeg']) ?? saida('')
   })
 
   const ui = await $.ui.mount(PAINEL)
   await ui.press({ key: 'adicionar-todos' })
-  await esperarTexto(ui, /Falta instalar: ffmpeg\./)
+  await esperarTexto(ui, /Não encontrei neste computador: ffmpeg\./)
 
   expect(chamados.some(c => c.includes('preparar.mjs'))).toBe(false)
   await ui.unmount()
+})
+
+test('o botão de instalar pede ao Claude, com ok da pessoa, o que faltou', async ($, on) => {
+  const pedidos: string[] = []
+  on('prompt.submit', (_, e) => { pedidos.push(e.text as string); return { drop: 'teste' } as never })
+  on('env.get', () => ({ value: undefined }))
+  on('process.run', (_, e) => {
+    const argv = e.argv as readonly string[]
+    return buscaDePrograma(argv, ['ffmpeg', 'ffprobe']) ?? saida('')
+  })
+
+  const ui = await $.ui.mount(PAINEL)
+  await ui.press({ key: 'adicionar-todos' })
+  await esperarTexto(ui, /Não encontrei neste computador: ffmpeg\./)
+  await ui.press({ key: 'instalar-programas' })
+
+  expect(pedidos[0]).toContain('não encontrou neste computador: ffmpeg.')
+  expect(pedidos[0]).toContain('espere o ok dela')
+  await ui.unmount()
+})
+
+test('o programa instalado depois de o app abrir é achado e usado pelo endereço, com as pastas atuais', async () => {
+  const chamadas: { argv: readonly string[]; env?: Record<string, string> }[] = []
+  const rodar = async (argv: readonly string[], init?: { env?: Record<string, string> }) => {
+    chamadas.push({ argv, env: init?.env })
+    if (argv[0] === 'powershell.exe') return { exitCode: 0, stdout: 'C:\\novo' }
+    if (argv[0] === 'where.exe') {
+      const programa = argv[1]?.replace('$PATH:', '')
+      return init?.env?.PATH === 'C:\\velha;C:\\novo' ? { exitCode: 0, stdout: `C:\\novo\\${programa}\r\n` } : { exitCode: 1, stdout: '' }
+    }
+    return { exitCode: 0, stdout: '' }
+  }
+
+  const achados = await acharProgramas(rodar, { os: 'Windows_NT', caminho: 'C:\\velha' })
+
+  expect(achados).toEqual({ faltando: [], node: 'C:\\novo\\node.exe', ambiente: { PATH: 'C:\\velha;C:\\novo' } })
+  // Nunca pelo nome: o app lembraria que não achou. E a busca não olha a pasta do projeto.
+  expect(chamadas.some(c => c.argv[0] === 'node' || c.argv[0] === 'ffmpeg')).toBe(false)
+  expect(chamadas.filter(c => c.argv[0] === 'where.exe').map(c => c.argv[1])).toEqual(['$PATH:node.exe', '$PATH:ffmpeg.exe', '$PATH:ffprobe.exe'])
+})
+
+test('sem endereço válido ou com programa quebrado, o aviso diz o que falta', async () => {
+  const rodar = async (argv: readonly string[]) => {
+    if (argv[0] === 'where.exe') return argv[1]?.includes('node') ? { exitCode: 1, stdout: '' } : { exitCode: 0, stdout: 'C:\\p\\x.exe' }
+    if (argv[0] === 'C:\\p\\x.exe') return { exitCode: 1, stdout: '' }
+    throw new Error('sem powershell')
+  }
+
+  expect((await acharProgramas(rodar, { os: 'Windows_NT', caminho: 'C:\\velha' })).faltando).toEqual(['node', 'ffmpeg', 'ffprobe'])
+})
+
+test('a lista de pastas ignora itens vazios ou relativos, que levariam à pasta do projeto', async () => {
+  const pastas = await pastasAtuais(async () => ({ exitCode: 0, stdout: '.;;bin;C:\\a' }), { os: 'Windows_NT', caminho: '.\\x;C:\\velha' })
+  expect(pastas).toBe('C:\\velha;C:\\a')
+})
+
+test('as pastas atuais vêm do sistema no Windows, do shell nos outros, e sobrevivem a uma busca que falha', async () => {
+  const windows = await pastasAtuais(async () => ({ exitCode: 0, stdout: 'C:\\a;C:\\b;C:\\a\r\n' }), { os: 'Windows_NT', caminho: 'C:\\velha;C:\\b' })
+  expect(windows).toBe('C:\\velha;C:\\b;C:\\a')
+
+  const argvs: (readonly string[])[] = []
+  const outro = await pastasAtuais(async argv => { argvs.push(argv); return { exitCode: 0, stdout: 'olá do shell\n/x/bin:/y/bin' } }, { shell: '/bin/zsh', caminho: '/usr/bin' })
+  expect(argvs[0]?.[0]).toBe('/bin/zsh')
+  expect(outro?.startsWith('/usr/bin:/x/bin:/y/bin:')).toBe(true)
+  expect(outro).toContain('/opt/homebrew/bin')
+
+  const semBusca = await pastasAtuais(async () => { throw new Error('sem powershell') }, { os: 'Windows_NT', caminho: 'C:\\velha' })
+  expect(semBusca).toBe('C:\\velha')
+})
+
+test('para a pessoa, ffmpeg e ffprobe são uma instalação só', () => {
+  expect(nomesParaInstalar(['node', 'ffmpeg', 'ffprobe'])).toEqual(['Node.js', 'ffmpeg'])
 })
 
 test('no painel, os ajustes ficam recolhidos e o meme aparece com prévia e resumo', async ($, on) => {

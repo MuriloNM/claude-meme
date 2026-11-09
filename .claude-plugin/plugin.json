@@ -1,6 +1,6 @@
 {
   "name": "meme",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Troca as bolinhas de trabalho do Claude por gatinhos em pixel e pelos memes que você escolher, no app e no terminal.",
   "author": { "name": "MuriloNM" },
   "license": "MIT",

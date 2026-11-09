@@ -1,9 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 import { ALTURA, CORES_GATO, LARGURA, LARGURA_PEQUENA, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, sortear } from './animacoes'
 import type { Cor, Nome } from './animacoes'
-import { comandoDePreparo, pedidoDeAdicionar, TEXTO_DE_AJUDA } from './receita'
+import { acharProgramas, nomesParaInstalar } from './programas'
+import type { Programas } from './programas'
+import { comandoDePreparo, pedidoDeAdicionar, pedidoDeInstalar, TEXTO_DE_AJUDA } from './receita'
 import { ACOES, ACOES_PADRAO, ALTURA_MEME, ALTURA_PERGUNTA, LARGURA_PREVIA, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, NOME_DA_ACAO, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta, svgNoPainel } from './sorteio'
 import type { MemeIndice } from './sorteio'
 import { SUGESTOES, acharSugestao } from './sugestoes'
@@ -26,7 +28,7 @@ const modoTerminal = atom({ plugin: 'meme', key: 'modoTerminal' } as const, 'des
 
 const PAINEL = 'memes'
 const TEMPO_POR_MEME = 180_000
-const PROGRAMAS_NECESSARIOS = [['node', '--version'], ['ffmpeg', '-version'], ['ffprobe', '-version']]
+const PROCURANDO = 'Procurando o Node.js e o ffmpeg'
 // Onde o gatinho fica na faixa esticada acima da pergunta, para cair no meio do cartão, que é mais estreito que a faixa.
 const POSICAO_ESPERANDO = 104
 
@@ -47,6 +49,10 @@ let preparando = false
 function descricaoDe(tool: string, input: unknown): string {
   const d = (input as { description?: unknown } | null)?.description
   return typeof d === 'string' && d.length > 0 ? d : tool
+}
+
+async function procurarProgramas($: EngineInterface): Promise<Programas> {
+  return acharProgramas((argv, init) => $.process.run(argv, init), { os: await $.env.get('OS'), shell: await $.env.get('SHELL'), caminho: await $.env.get('PATH') })
 }
 
 export const register: Register = on => {
@@ -118,7 +124,8 @@ export const register: Register = on => {
       // A versão do terminal é um extra: se falhar, o meme continua valendo no app.
       if (acharSugestao(nome)?.terminal) {
         try {
-          const r = await $.process.run(['node', `${$.plugin.root}/receita/terminal.mjs`, '--entrada', m.arquivo], { timeoutMs: TEMPO_POR_MEME })
+          const { node, ambiente } = await procurarProgramas($)
+          const r = await $.process.run([node ?? 'node', `${$.plugin.root}/receita/terminal.mjs`, '--entrada', m.arquivo], { timeoutMs: TEMPO_POR_MEME, env: ambiente })
           if (r.exitCode === 0) dados = { ...dados, terminal: animacaoDePixels(`meme-${nome}`, JSON.parse(r.stdout) as PixelsTerminal) }
         } catch {
           dados = { ...dados, terminal: null }
@@ -430,7 +437,7 @@ export const register: Register = on => {
         {(restantes.length > 0 || andamento.total > 0 || andamento.faltando.length > 0) && (
         <Box flexDirection="column" gap="sm" padding="md" borderStyle="round" borderDimColor>
         {restantes.length > 0 && !andamento.atual && <Text weight="medium">{lista.length === 0 ? `Comece com ${restantes.length} memes prontos` : `Faltam ${restantes.length} sugestões`}</Text>}
-        {restantes.length > 0 && !andamento.atual && <Text size="caption" dimColor>Um clique baixa dos links originais e prepara tudo aqui no seu computador, sem usar seu limite.</Text>}
+        {restantes.length > 0 && !andamento.atual && <Text size="caption" dimColor>Um clique baixa dos links originais e prepara tudo aqui no seu computador, sem usar seu limite. Precisa do Node.js e do ffmpeg.</Text>}
         {restantes.length > 0 && !andamento.atual && (
           <Button
             key="adicionar-todos"
@@ -442,11 +449,9 @@ export const register: Register = on => {
               // O trabalho segue depois de o clique responder, e o painel acompanha pelo estado.
               void (async () => {
                 try {
-                  const faltando: string[] = []
-                  for (const argv of PROGRAMAS_NECESSARIOS) {
-                    const instalado = await $.process.run(argv).then(r => r.exitCode === 0, () => false)
-                    if (!instalado) faltando.push(argv[0] ?? '')
-                  }
+                  // Cada clique procura de novo, e o aviso antigo sai da tela enquanto isso.
+                  await update($, preparo, () => ({ ...PREPARO_VAZIO, atual: PROCURANDO }))
+                  const { faltando, node, ambiente } = await procurarProgramas($)
                   if (faltando.length > 0) {
                     await update($, preparo, () => ({ ...PREPARO_VAZIO, faltando }))
                     return
@@ -457,7 +462,7 @@ export const register: Register = on => {
                   for (const s of fila) {
                     await update($, preparo, () => ({ atual: s.titulo, feitos, total: fila.length, falhas, faltando: [] }))
                     try {
-                      const r = await $.process.run(comandoDePreparo(s, $.plugin.root), { timeoutMs: TEMPO_POR_MEME })
+                      const r = await $.process.run(comandoDePreparo(s, $.plugin.root, node), { timeoutMs: TEMPO_POR_MEME, env: ambiente })
                       if (r.exitCode !== 0) throw new Error(r.stderr.trim())
                       const pronto = JSON.parse(r.stdout) as { gif: string; largura: number; pergunta: string | null; larguraPergunta: number | null; terminal?: PixelsTerminal | null }
                       if (!ehGif(pronto.gif) || svgDoGif(pronto.gif, pronto.largura).length > LIMITE_DESENHO) throw new Error('o desenho não serve')
@@ -475,6 +480,10 @@ export const register: Register = on => {
                   }
                   await update($, preparo, () => ({ atual: null, feitos, total: fila.length, falhas, faltando: [] }))
                   $.ui.toast(`Memes prontos: ${feitos} de ${fila.length}.`)
+                } catch (erro) {
+                  // Sem isto, o painel ficaria parado em "Procurando" até reabrir a sessão.
+                  await update($, preparo, () => PREPARO_VAZIO)
+                  $.ui.toast(`Não deu para adicionar: ${erro instanceof Error ? erro.message : String(erro)}`)
                 } finally {
                   preparando = false
                 }
@@ -482,8 +491,8 @@ export const register: Register = on => {
             }}
           />
         )}
-        {andamento.atual && <Text weight="medium">Preparando {andamento.atual}…</Text>}
-        {andamento.atual && (
+        {andamento.atual && <Text weight="medium">{andamento.total > 0 ? `Preparando ${andamento.atual}` : andamento.atual}…</Text>}
+        {andamento.atual && andamento.total > 0 && (
           <Box flexDirection="column" gap="xs">
             <Box width="100%" height={1} backgroundColor="inactive">
               <Box width={`${pronto}%`} height={1} backgroundColor="#e8a33d" />
@@ -493,7 +502,8 @@ export const register: Register = on => {
         )}
         {!andamento.atual && andamento.total > 0 && <Text size="caption" dimColor>Prontos: {andamento.feitos} de {andamento.total}.</Text>}
         {!andamento.atual && andamento.falhas.length > 0 && <Text size="caption" dimColor>Não deu: {andamento.falhas.join(', ')}. Use Adicionar nesses, e o Claude tenta ajustar.</Text>}
-        {andamento.faltando.length > 0 && <Text>Falta instalar: {andamento.faltando.join(', ')}. Instale e clique de novo, ou use Adicionar para o Claude ajudar.</Text>}
+        {andamento.faltando.length > 0 && <Text>Não encontrei neste computador: {nomesParaInstalar(andamento.faltando).join(' e ')}. O Claude pode instalar para você; depois, é só clicar em Adicionar todos de novo.</Text>}
+        {andamento.faltando.length > 0 && <Button key="instalar-programas" label="Pedir ao Claude para instalar" onPress={() => void $.prompt.submit({ text: pedidoDeInstalar(nomesParaInstalar(andamento.faltando)) })} />}
         </Box>
         )}
 

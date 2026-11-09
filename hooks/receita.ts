@@ -24,8 +24,17 @@ Link: ${link}${ajuste}
 9. Apague a pasta temporária e diga em uma linha que o meme entrou e em quais ações. Essa cópia é só para uso pessoal: não publique o arquivo em lugar nenhum.`
 }
 
+export function pedidoDeInstalar(programas: readonly string[]): string {
+  return `O botão "Adicionar todos" do mod meme não encontrou neste computador: ${programas.join(' e ')}. Ajude a pessoa a resolver, no idioma dela e em poucas palavras.
+
+1. Confira se já está instalado, inclusive fora das pastas de programas do sistema.
+2. Se faltar, diga o que vai instalar e por qual gerenciador deste sistema (winget, brew, apt) e espere o ok dela: não instale nada sem o ok.
+3. Se estiver instalado numa pasta fora da lista de programas do sistema ou do usuário, explique e, com o ok dela, inclua essa pasta na lista gravada. O mod lê essa lista a cada clique; não precisa reiniciar o app.
+4. No fim, confirme em um shell novo que os programas respondem e diga para clicar em "Adicionar todos" de novo no painel.`
+}
+
 // O comando que prepara uma sugestão aqui mesmo, sem o modelo.
-export function comandoDePreparo(s: Sugestao, raiz: string): string[] {
+export function comandoDePreparo(s: Sugestao, raiz: string, node = 'node'): string[] {
   const opcoes: [string, string | number | undefined][] = [
     ['modo', s.modo],
     ['recorte', s.recorte],
@@ -37,7 +46,7 @@ export function comandoDePreparo(s: Sugestao, raiz: string): string[] {
   ]
 
   return [
-    'node',
+    node,
     `${raiz}/receita/preparar.mjs`,
     '--link',
     s.link,

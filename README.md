@@ -22,7 +22,7 @@ claude plugin install meme --marketplace MuriloNM/claude-meme
 
 Logo depois de instalar, o mod mostra gatinhos em pixel. Para usar memes, digite `/meme`: abre um painel com as sugestões, onde você também tira os que não quiser e escolhe em quais ações cada um aparece.
 
-O botão **Adicionar todos** baixa as sugestões dos links originais, recorta e guarda na sua máquina em um clique, sem usar seu limite de uso. Ele precisa do [Node.js](https://nodejs.org) e do [ffmpeg](https://ffmpeg.org) instalados; o painel avisa se faltar algum.
+O botão **Adicionar todos** baixa as sugestões dos links originais, recorta e guarda na sua máquina em um clique, sem usar seu limite de uso. Ele precisa do [Node.js](https://nodejs.org) e do [ffmpeg](https://ffmpeg.org) instalados. Se faltar algum, o painel oferece um botão para pedir ao Claude que instale, com o seu ok, e não é preciso reiniciar o app depois.
 
 O botão **Adicionar** de cada sugestão e o comando `/meme adicionar` pedem ao Claude para baixar, recortar, conferir o resultado e guardar. Isso usa um pouco do seu limite, mas ele ajusta o recorte se o arquivo tiver mudado, e funciona com qualquer link. Se faltar o ffmpeg, o Claude explica como instalar e espera o seu ok.
 
