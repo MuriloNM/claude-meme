@@ -1,0 +1,6 @@
+{
+  "name": "claude-meme",
+  "description": "Gatinhos em pixel e os seus memes no lugar das bolinhas de trabalho do Claude.",
+  "owner": { "name": "MuriloNM" },
+  "plugins": [{ "name": "meme", "source": "./" }]
+}
