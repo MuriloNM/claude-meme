@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ALTURA, LARGURA, LARGURA_PEQUENA, NOMES, PEQUENAS_PIXEL, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa } from './animacoes'
+import { ALTURA, COMPANHEIROS, LARGURA, LARGURA_PEQUENA, NOMES, PEQUENAS_PIXEL, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, companheiroDe } from './animacoes'
 import { acharProgramas, nomesParaInstalar, pastasAtuais } from './programas'
 import { FERRAMENTA_GUARDAR, comandoDePreparo, pedidoDeAdicionar } from './receita'
 import { ACOES, ACOES_PADRAO, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta } from './sorteio'
@@ -70,8 +70,8 @@ test('na pergunta revezam o gatinho e os memes preparados para isso', () => {
 })
 
 test('as animações em pixel têm o tamanho certo e animam', () => {
-  for (const nome of NOMES) {
-    const svg = desenhar(nome)
+  for (const nome of NOMES) for (const quem of COMPANHEIROS) {
+    const svg = desenhar(nome, 'laranja', quem)
     expect(svg).toContain(`width="100%" height="${ALTURA}"`)
     expect(svg).toContain('<animate')
     expect(svg).not.toContain('NaN')
@@ -85,6 +85,12 @@ test('as animações em pixel têm o tamanho certo e animam', () => {
   }
   expect(desenharEsperando('cinza')).toContain('#9aa0a6')
   expect(desenharEsperando()).toContain('#e0567f')
+})
+
+test('o companheiro troca com a semente e nenhum é o mascote do Claude', () => {
+  const vistos = new Set(Array.from({ length: 30 }, (_, i) => companheiroDe(i * 7)))
+  expect(vistos.size).toBe(COMPANHEIROS.length)
+  for (const nome of NOMES) expect(desenhar(nome)).not.toContain('#d97757')
 })
 
 test('a faixa segue a fase', () => {

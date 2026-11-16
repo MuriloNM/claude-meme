@@ -17,7 +17,7 @@ export function pintar(svg: string, cor: Cor): string {
   return Object.entries(TONS_CINZA).reduce((s, [de, para]) => s.split(de).join(para), svg)
 }
 
-const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e', C: '#d97757', S: '#f0a17f' }
+const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e', M: '#a0703f', H: '#6e4a2a', N: '#3a2616', L: '#f08a24', F: '#4caf50', G: '#8a96a3', K: '#16201e', V: '#8b6cd9', W: '#ffffff', U: '#4b3399', Y: '#e8c23d' }
 
 // Desenha linhas de texto como pixels; cada letra é uma cor, ponto é vazio.
 function sprite(linhas: string[], c: number, x0 = 0, y0 = 0): string {
@@ -210,15 +210,15 @@ function correndo(): string {
 }
 
 // Pensando: sentado, com bolinhas subindo até um balão de reticências.
-function pensando(): string {
+function pensando(c: Companheiro): string {
   const T = 3
   const bola = (i: number, x: number, y: number, r: number) => surge(i, 5, `<circle cx="${x}" cy="${y}" r="${r}" fill="${CINZA_LINHA}"/>`, T)
   const balao = surge(2, 5, `<rect x="58" y="3" width="40" height="16" rx="7" fill="none" stroke="${CINZA_LINHA}" stroke-width="2"/>`, T)
   const pontos = [3, 4, 5].map((i, k) => surge(i, 5, `<rect x="${67 + k * 8}" y="10" width="4" height="3" fill="${CINZA_LINHA}"/>`, T)).join('')
-  // Na outra ponta, o mascote do Claude pensa junto, com a faísca girando em cima.
-  const faisca = `<g>${sprite(FAISCA, 2, -5, -5)}<animateTransform attributeName="transform" type="rotate" values="0;90" dur="1.2s" repeatCount="indefinite" additive="sum"/></g>`
-  const mascote = em(100, -45, Y_MASCOTE, mascoteParado() + `<g transform="translate(16 -8)">${faisca}</g>`)
-  return gatoSentado(14) + bola(0, 46, 20, 1.5) + bola(1, 52, 15, 2) + balao + pontos + mascote
+  // Na outra ponta, o companheiro pensa junto: três pontinhos sobem em cima dele.
+  const pontinhos = [0, 1, 2].map(i => surge(i, 3, `<rect x="${c.largura / 2 - 7 + i * 5}" y="-6" width="3" height="3" fill="${CINZA_LINHA}"/>`, T)).join('')
+  const companheiro = em(100, -c.largura - 12, yDe(c), espelharSe(c, c.parado()) + pontinhos)
+  return gatoSentado(14) + bola(0, 46, 20, 1.5) + bola(1, 52, 15, 2) + balao + pontos + companheiro
 }
 
 // Respondendo: bate no teclado e o texto vai aparecendo.
@@ -293,58 +293,150 @@ function editando(): string {
   return gatoBatendo(14, 0.4) + tracos + lapis
 }
 
-// O mascote do Claude em pixel: corpo laranja, dois olhos, bracinhos dos lados e quatro perninhas. 33 x 18 em pixels de 3.
-const MASCOTE_CORPO = [
-  '..CCCCCCC..',
-  '..CECCCEC..',
-  'CCCCCCCCCCC',
-  '..CCCCCCC..',
-  '..CCCCCCC..',
+// Os companheiros do gatinho: desenhos nossos, sorteados a cada pedido para a faixa variar.
+export const COMPANHEIROS = ['capivara', 'robo', 'bolinha'] as const
+export type NomeCompanheiro = (typeof COMPANHEIROS)[number]
+
+type Companheiro = {
+  largura: number
+  altura: number
+  // Parado, com o jeito próprio de cada um (piscar, cursor, chaves flutuando).
+  parado: () => string
+  andando: (dur: number, direcao: 'direita' | 'esquerda') => string
+}
+
+function alterna(a: string, b: string, dur: number): string {
+  const liga = (de: number, ate: number) => `<animate attributeName="opacity" calcMode="discrete" values="${de};${ate}" keyTimes="0;0.5" dur="${dur}s" repeatCount="indefinite"/>`
+  return `<g>${liga(1, 0)}${a}</g><g opacity="0">${liga(0, 1)}${b}</g>`
+}
+
+function espelharEm(largura: number, conteudo: string): string {
+  return `<g transform="translate(${largura} 0) scale(-1 1)">${conteudo}</g>`
+}
+
+// Capivara de lado, olhando para a direita, com uma laranja na cabeça.
+const CAPIVARA_CORPO = [
+  '............LF..',
+  '...........LLL..',
+  '..........H..H..',
+  '..MMMMMMMMMMMMM.',
+  '.MMMMMMMMMMMEMMM',
+  'MMMMMMMMMMMMMMMN',
+  'MMMMMMMMMMMMMMMM',
+  'MMMMMMMMMMMMMMM.',
+  '.MMMMMMMMMMMMM..',
 ]
-const MASCOTE_A = [...MASCOTE_CORPO, '..C.C.C.C..']
-const MASCOTE_B = [...MASCOTE_CORPO, '.C.C...C.C.']
-const ALTO_MASCOTE = 18
-const Y_MASCOTE = ALTURA - 2 - ALTO_MASCOTE
-
-function mascoteParado(): string {
-  const olhos = `<g fill="#d97757" opacity="0"><rect x="9" y="3" width="3" height="3"/><rect x="21" y="3" width="3" height="3"/><animate attributeName="opacity" calcMode="discrete" values="0;1;0" keyTimes="0;0.9;0.96" dur="2.3s" repeatCount="indefinite"/></g>`
-  return sprite(MASCOTE_A, 3) + olhos
+const CAPIVARA_A = [...CAPIVARA_CORPO, '.HH..HH..HH.HH..']
+const CAPIVARA_B = [...CAPIVARA_CORPO, '..HH..HH.HH..HH.']
+const capivara: Companheiro = {
+  largura: 32,
+  altura: 20,
+  parado: () => {
+    const pisca = `<rect x="24" y="8" width="2" height="2" fill="#a0703f" opacity="0"><animate attributeName="opacity" calcMode="discrete" values="0;1;0" keyTimes="0;0.9;0.96" dur="3.1s" repeatCount="indefinite"/></rect>`
+    return sprite(CAPIVARA_A, 2) + pisca
+  },
+  andando: (dur, direcao) => {
+    const passo = alterna(sprite(CAPIVARA_A, 2), sprite(CAPIVARA_B, 2, 0, -1), dur * 1.4)
+    return direcao === 'esquerda' ? espelharEm(32, passo) : passo
+  },
 }
 
-function mascoteAndando(dur: number): string {
-  const a = `<g>${sprite(MASCOTE_A, 3)}<animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;0.5" dur="${dur}s" repeatCount="indefinite"/></g>`
-  const b = `<g opacity="0">${sprite(MASCOTE_B, 3, 0, -1)}<animate attributeName="opacity" calcMode="discrete" values="0;1" keyTimes="0;0.5" dur="${dur}s" repeatCount="indefinite"/></g>`
-  return a + b
+// Robozinho com uma tela no rosto: o olho é um cursor de terminal.
+const ROBO_CORPO = [
+  '.....PP.....',
+  '......G.....',
+  '.GGGGGGGGGG.',
+  '.GKKKKKKKKG.',
+  '.GKKKKKKKKG.',
+  '.GKKKKKKKKG.',
+  '.GGGGGGGGGG.',
+  'GG.GGGGGG.GG',
+  '...GGGGGG...',
+]
+const ROBO_A = [...ROBO_CORPO, '...G....G...']
+const ROBO_B = [...ROBO_CORPO, '..G......G..']
+const roboRosto = () => {
+  const seta = '<g fill="#35b87a"><rect x="6" y="7" width="2" height="2"/><rect x="8" y="9" width="2" height="2"/><rect x="6" y="11" width="2" height="1"/></g>'
+  const cursor = '<rect x="12" y="10" width="5" height="2" fill="#35b87a"><animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;0.5" dur="0.8s" repeatCount="indefinite"/></rect>'
+  return seta + cursor
+}
+const robo: Companheiro = {
+  largura: 24,
+  altura: 20,
+  parado: () => sprite(ROBO_A, 2) + roboRosto(),
+  andando: dur => alterna(sprite(ROBO_A, 2) + roboRosto(), `<g transform="translate(0 -1)">${sprite(ROBO_B, 2)}${roboRosto()}</g>`, dur),
 }
 
-// A faísca laranja do Claude.
-const FAISCA = ['..S..', 'S.S.S', '.SSS.', 'S.S.S', '..S..']
+// Bolinha de código: um bichinho roxo que quica, com chaves { } flutuando em cima.
+const BOLINHA_A = [
+  '...VVVVV...',
+  '..VVVVVVV..',
+  '.VVVVVVVVV.',
+  'VVWVVVVVWVV',
+  'VVWVVVVVWVV',
+  'VVVVVVVVVVV',
+  'VVVVUUUVVVV',
+  '.VVVVVVVVV.',
+  '..VVVVVVV..',
+]
+// Achatada, como quando bate no chão.
+const BOLINHA_B = [
+  '..VVVVVVV..',
+  '.VVVVVVVVV.',
+  'VVWVVVVVWVV',
+  'VVWVVVVVWVV',
+  'VVVVVVVVVVV',
+  'VVVVUUUVVVV',
+  'VVVVVVVVVVV',
+  '.VVVVVVVVV.',
+]
+const CHAVES = ['.UU...UU.', '.U.....U.', 'U.......U', '.U.....U.', '.UU...UU.']
+const bolinha: Companheiro = {
+  largura: 22,
+  altura: 18,
+  parado: () => {
+    const flutua = `<g>${sprite(CHAVES, 2, 2, -12)}<animateTransform attributeName="transform" type="translate" values="0 0;0 -2;0 0" dur="1.4s" repeatCount="indefinite"/></g>`
+    return sprite(BOLINHA_A, 2) + flutua
+  },
+  andando: dur => alterna(`<g transform="translate(0 -3)">${sprite(BOLINHA_A, 2)}</g>`, sprite(BOLINHA_B, 2, 0, 2), dur),
+}
+
+const QUEM: Record<NomeCompanheiro, Companheiro> = { capivara, robo, bolinha }
+const yDe = (c: Companheiro) => ALTURA - 2 - c.altura
+
+// No encontro e no pensando, a capivara parada olha para o gatinho, à esquerda.
+function espelharSe(c: Companheiro, conteudo: string): string {
+  return c === capivara ? espelharEm(c.largura, conteudo) : conteudo
+}
+
+// Estrelinhas amarelas que piscam no alto.
+const ESTRELA = ['..Y..', 'Y.Y.Y', '.YYY.', 'Y.Y.Y', '..Y..']
 const EXCLAMACAO = ['P', 'P', 'P', '.', 'P']
 const CORACAO = ['.PP.PP.', 'PPPPPPP', 'PPPPPPP', '.PPPPP.', '..PPP..', '...P...']
 
-// O mascote atravessa a faixa com o gatinho atrás; na ponta, leva um susto e é a vez dele de correr atrás.
-function perseguicao(): string {
+// O companheiro atravessa a faixa com o gatinho atrás; na ponta, leva um susto e é a vez dele de correr atrás.
+function perseguicao(c: Companheiro): string {
   const T = 9
   const ida = 0.42
   const pausa = 0.52
   const linear = (pts: [number, number, number][], y: number): PontoLargo[] => pts.map(([t, p, x]) => [t, p, x, y])
-  const mascote = linear([[0, 0, 40], [ida, 100, -40], [pausa, 100, -40], [0.96, 0, 40], [1, 0, 40]], Y_MASCOTE)
+  const companheiro = linear([[0, 0, 40], [ida, 100, -40], [pausa, 100, -40], [0.96, 0, 40], [1, 0, 40]], yDe(c))
   const gato = linear([[0, 0, -30], [ida, 100, -80], [pausa, 100, -80], [0.96, 0, -30], [1, 0, -30]], 8)
-  const susto = `<g opacity="0">${visivel([[ida + 0.01, pausa]], T)}${sprite(EXCLAMACAO, 2, 15, -12)}</g>`
-  const corpoMascote = `<g>${visivel([[0, ida], [pausa, 1]], T)}${mascoteAndando(0.3)}</g><g opacity="0">${visivel([[ida, pausa]], T)}${mascoteParado()}</g>${susto}`
+  const susto = `<g opacity="0">${visivel([[ida + 0.01, pausa]], T)}${sprite(EXCLAMACAO, 2, c.largura / 2 - 1, -12)}</g>`
+  const corpo = `<g>${visivel([[0, ida]], T)}${c.andando(0.3, 'direita')}</g><g opacity="0">${visivel([[ida, pausa]], T)}${espelharSe(c, c.parado())}</g><g opacity="0">${visivel([[pausa, 1]], T)}${c.andando(0.3, 'esquerda')}</g>${susto}`
   const gatoDireita = `<g>${visivel([[0, ida]], T)}${passos('direita', 0.28)}</g>`
   const gatoSentado2 = `<g opacity="0">${visivel([[ida, pausa]], T)}${sprite(SENTADO, 2)}</g>`
   const gatoEsquerda = `<g opacity="0">${visivel([[pausa, 1]], T)}${passos('esquerda', 0.22)}</g>`
-  return chaoLinha() + trilha(gato, T, gatoDireita + gatoSentado2 + gatoEsquerda) + trilha(mascote, T, corpoMascote)
+  return chaoLinha() + trilha(gato, T, gatoDireita + gatoSentado2 + gatoEsquerda) + trilha(companheiro, T, corpo)
 }
 
-// O mascote pula de caixa em caixa até a ponta e volta, com faíscas piscando no alto.
-function pulando(): string {
+// O companheiro pula de caixa em caixa até a ponta e volta, com estrelinhas piscando no alto.
+function pulando(c: Companheiro): string {
   const T = 10
   // Cada parada: [%, px, altura da caixa]. As caixas ficam nas paradas do meio.
   const paradas: [number, number, number][] = [[0, 6, 0], [18, 0, 4], [36, 0, 7], [54, 0, 5], [72, 0, 8], [100, -40, 0]]
   const caixas = paradas.filter(p => p[2] > 0).map(([p, x, h]) => em(p, x - 1, ALTURA - 2 - h, `<rect width="35" height="${h}" fill="#9c6b3f"/><rect width="35" height="2" fill="#c49a6c"/>`)).join('')
-  const topo = (h: number) => Y_MASCOTE - h
+  const topo = (h: number) => yDe(c) - h
   const pulos = (lista: [number, number, number][], t0: number, t1: number): PontoLargo[] => {
     const pts: PontoLargo[] = []
     const n = lista.length - 1
@@ -367,24 +459,25 @@ function pulando(): string {
     return pts
   }
   const caminhoTodo = [...pulos(paradas, 0, 0.46), ...pulos([...paradas].reverse(), 0.5, 0.96), [1, 0, 6, topo(0)] as PontoLargo]
-  const faiscas = [10, 27, 45, 63, 81, 93].map((p, i) => {
+  const estrelas = [10, 27, 45, 63, 81, 93].map((p, i) => {
     const a = +((i * 0.15) % 0.9).toFixed(3)
-    return `<g opacity="0">${visivel([[a, +(a + 0.12).toFixed(3)]], 2.4)}${em(p, 0, 1, sprite(FAISCA, 2))}</g>`
+    return `<g opacity="0">${visivel([[a, +(a + 0.12).toFixed(3)]], 2.4)}${em(p, 0, 1, sprite(ESTRELA, 2))}</g>`
   }).join('')
-  return chaoLinha() + caixas + faiscas + trilha(caminhoTodo, T, mascoteParado())
+  return chaoLinha() + caixas + estrelas + trilha(caminhoTodo, T, c.parado())
 }
 
-// O gatinho e o mascote vêm das pontas, se encontram no meio, sobe um coração, e cada um volta para o seu lado.
-function encontro(): string {
+// O gatinho e o companheiro vêm das pontas, se encontram no meio, sobe um coração, e cada um volta para o seu lado.
+function encontro(c: Companheiro): string {
   const T = 9
   const chega = 0.38
   const sai = 0.62
-  const mascote: PontoLargo[] = [[0, 100, -40, Y_MASCOTE], [chega, 50, 6, Y_MASCOTE], [sai, 50, 6, Y_MASCOTE], [1, 100, -40, Y_MASCOTE]]
+  const y = yDe(c)
+  const companheiro: PontoLargo[] = [[0, 100, -40, y], [chega, 50, 6, y], [sai, 50, 6, y], [1, 100, -40, y]]
   const gato: PontoLargo[] = [[0, 0, 6, 8], [chega, 50, -32, 8], [sai, 50, -32, 8], [1, 0, 6, 8]]
   const coracao = `<g opacity="0">${visivel([[chega + 0.03, sai - 0.02]], T)}${trilha([[0, 50, -7, 10], [chega, 50, -7, 10], [sai, 50, -7, -2], [1, 50, -7, -2]], T, sprite(CORACAO, 2))}</g>`
   const gatoAnda = `<g>${visivel([[0, chega]], T)}${passos('direita', 0.3)}</g><g opacity="0">${visivel([[chega, sai]], T)}${sprite(SENTADO, 2)}</g><g opacity="0">${visivel([[sai, 1]], T)}${passos('esquerda', 0.3)}</g>`
-  const mascoteAnda = `<g>${visivel([[0, chega], [sai, 1]], T)}${mascoteAndando(0.3)}</g><g opacity="0">${visivel([[chega, sai]], T)}${mascoteParado()}</g>`
-  return chaoLinha() + trilha(gato, T, gatoAnda) + trilha(mascote, T, mascoteAnda) + coracao
+  const anda = `<g>${visivel([[0, chega]], T)}${c.andando(0.3, 'esquerda')}</g><g opacity="0">${visivel([[chega, sai]], T)}${espelharSe(c, c.parado())}</g><g opacity="0">${visivel([[sai, 1]], T)}${c.andando(0.3, 'direita')}</g>`
+  return chaoLinha() + trilha(gato, T, gatoAnda) + trilha(companheiro, T, anda) + coracao
 }
 
 // As pequenas, para a linha de status: em pixel, 80 por 32.
@@ -490,11 +583,16 @@ export function animacaoDe(modo: string, ferramenta: string | null, sorteada: No
   return 'comando'
 }
 
-const DESENHOS: Record<Nome, () => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo, perseguicao, pulando, encontro }
+const DESENHOS: Record<Nome, (c: Companheiro) => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo, perseguicao, pulando, encontro }
 
 // Sem viewBox e com largura 100%: a faixa ocupa a linha toda, e o pixel fica com o mesmo tamanho em qualquer largura.
-export function desenhar(nome: Nome, cor: Cor = 'laranja'): string {
-  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome]()}</svg>`, cor)
+export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara'): string {
+  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome](QUEM[companheiro])}</svg>`, cor)
+}
+
+// O companheiro da vez: troca a cada pedido, junto com a cena.
+export function companheiroDe(semente: number): NomeCompanheiro {
+  return COMPANHEIROS[Math.abs(Math.floor(semente / 7)) % COMPANHEIROS.length] ?? 'capivara'
 }
 
 // Sorteia outra, nunca a mesma de agora; a semente vem de fora para o teste poder fixá-la.

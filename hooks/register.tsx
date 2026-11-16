@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { ALTURA, CORES_GATO, LARGURA, LARGURA_PEQUENA, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, sortear } from './animacoes'
+import { ALTURA, CORES_GATO, LARGURA, LARGURA_PEQUENA, animacaoDe, companheiroDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, sortear } from './animacoes'
 import type { Cor, Nome } from './animacoes'
 import { acharProgramas, nomesParaInstalar } from './programas'
 import type { Programas } from './programas'
@@ -392,7 +392,7 @@ export const register: Register = on => {
     const nome = animacaoDe(faseDaFaixa(f, ultimaFase), f, await read($, atual), null)
 
     // Sem largura: a faixa ocupa a linha toda.
-    return <Svg source={desenhar(nome, await read($, cor))} alt={`Animação ${nome}`} height={ALTURA} isInteractive />
+    return <Svg source={desenhar(nome, await read($, cor), companheiroDe(await read($, semente)))} alt={`Animação ${nome}`} height={ALTURA} isInteractive />
   })
 
   // O painel: os memes da pessoa, com o que tirar e quando aparecer, e as sugestões que ainda não entraram.
