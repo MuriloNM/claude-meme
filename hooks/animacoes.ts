@@ -2,6 +2,8 @@
 // A faixa tem 32 de altura: a linha do app não passa de cerca de 32 e encolhe o desenho que passar.
 // Na largura, a faixa ocupa a linha toda: as posições vão em porcentagem. LARGURA é só a referência da faixa da pergunta.
 export const LARGURA = 400
+// A largura que a faixa pede ao app; ele corta no tamanho da linha.
+export const LARGURA_MAXIMA = 4000
 export const ALTURA = 32
 export const NOMES = ['correndo', 'pensando', 'digitando', 'comando', 'lendo', 'editando', 'novelo', 'surgindo', 'perseguicao', 'pulando', 'encontro'] as const
 export type Nome = (typeof NOMES)[number]
@@ -593,9 +595,10 @@ export function animacaoDe(modo: string, ferramenta: string | null, sorteada: No
 
 const DESENHOS: Record<Nome, (c: Companheiro) => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo, perseguicao, pulando, encontro }
 
-// Sem viewBox e com largura 100%: a faixa ocupa a linha toda, e o pixel fica com o mesmo tamanho em qualquer largura.
+// O app mede a largura pelo atributo width: sem número, ele usa 300 (o padrão de imagem). O atributo grande faz o app abrir
+// a linha toda; o style 100% faz o desenho caber nela. Sem viewBox, o pixel fica com o mesmo tamanho em qualquer largura.
 export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara'): string {
-  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome](QUEM[companheiro])}</svg>`, cor)
+  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="${LARGURA_MAXIMA}" height="${ALTURA}" style="width:100%" shape-rendering="crispEdges">${DESENHOS[nome](QUEM[companheiro])}</svg>`, cor)
 }
 
 // O companheiro da vez: troca a cada pedido, junto com a cena.

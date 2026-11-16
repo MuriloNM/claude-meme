@@ -72,7 +72,7 @@ test('na pergunta revezam o gatinho e os memes preparados para isso', () => {
 test('as animações em pixel têm o tamanho certo e animam', () => {
   for (const nome of NOMES) for (const quem of COMPANHEIROS) {
     const svg = desenhar(nome, 'laranja', quem)
-    expect(svg).toContain(`width="100%" height="${ALTURA}"`)
+    expect(svg).toContain(`height="${ALTURA}" style="width:100%"`)
     expect(svg).toContain('<animate')
     expect(svg).not.toContain('NaN')
     expect(svg.length).toBeLessThan(LIMITE_DESENHO)
