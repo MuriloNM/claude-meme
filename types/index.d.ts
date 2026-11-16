@@ -1,7 +1,7 @@
 declare module 'claude-code' {
   interface PluginState {
     'meme': {
-      atual: Shaped<'correndo' | 'pensando' | 'digitando' | 'comando' | 'lendo' | 'editando' | 'novelo' | 'surgindo'>
+      atual: Shaped<'correndo' | 'pensando' | 'digitando' | 'comando' | 'lendo' | 'editando' | 'novelo' | 'surgindo' | 'perseguicao' | 'pulando' | 'encontro'>
       ferramenta: Shaped<string | null>
       semente: Shaped<number>
       vezDaPergunta: Shaped<number>

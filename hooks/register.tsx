@@ -391,7 +391,8 @@ export const register: Register = on => {
     const { Svg } = $.ui.resolve(e)
     const nome = animacaoDe(faseDaFaixa(f, ultimaFase), f, await read($, atual), null)
 
-    return <Svg source={desenhar(nome, await read($, cor))} alt={`Animação ${nome}`} width={LARGURA} height={ALTURA} isInteractive />
+    // Sem largura: a faixa ocupa a linha toda.
+    return <Svg source={desenhar(nome, await read($, cor))} alt={`Animação ${nome}`} height={ALTURA} isInteractive />
   })
 
   // O painel: os memes da pessoa, com o que tirar e quando aparecer, e as sugestões que ainda não entraram.

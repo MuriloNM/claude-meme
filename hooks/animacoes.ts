@@ -1,11 +1,12 @@
 // As animações em pixel, em SVG puro (SMIL, sem script). Sem dependências.
-// A faixa tem 400 x 32: a linha do app não passa de cerca de 32 de altura e encolhe o desenho que passar.
+// A faixa tem 32 de altura: a linha do app não passa de cerca de 32 e encolhe o desenho que passar.
+// Na largura, a faixa ocupa a linha toda: as posições vão em porcentagem. LARGURA é só a referência da faixa da pergunta.
 export const LARGURA = 400
 export const ALTURA = 32
-export const NOMES = ['correndo', 'pensando', 'digitando', 'comando', 'lendo', 'editando', 'novelo', 'surgindo'] as const
+export const NOMES = ['correndo', 'pensando', 'digitando', 'comando', 'lendo', 'editando', 'novelo', 'surgindo', 'perseguicao', 'pulando', 'encontro'] as const
 export type Nome = (typeof NOMES)[number]
 // O sorteio vale para o momento em que o Claude pensa.
-export const SORTEIO: readonly Nome[] = ['pensando', 'novelo', 'surgindo']
+export const SORTEIO: readonly Nome[] = ['pensando', 'novelo', 'surgindo', 'perseguicao', 'pulando', 'encontro']
 
 export const CORES_GATO = ['laranja', 'cinza'] as const
 export type Cor = (typeof CORES_GATO)[number]
@@ -16,7 +17,7 @@ export function pintar(svg: string, cor: Cor): string {
   return Object.entries(TONS_CINZA).reduce((s, [de, para]) => s.split(de).join(para), svg)
 }
 
-const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e' }
+const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e', C: '#d97757', S: '#f0a17f' }
 
 // Desenha linhas de texto como pixels; cada letra é uma cor, ponto é vazio.
 function sprite(linhas: string[], c: number, x0 = 0, y0 = 0): string {
@@ -52,6 +53,29 @@ function caminho(pontos: [number, number, number][], dur: number): string {
   const f = (n: number) => +n.toFixed(4)
   return `<animateTransform attributeName="transform" type="translate" values="${pontos.map(p => `${f(p[1])} ${f(p[2])}`).join(';')}" keyTimes="${pontos.map(p => f(p[0])).join(';')}" dur="${dur}s" repeatCount="indefinite"/>`
 }
+
+// Ponto na faixa larga: [fração do ciclo, % da largura, px a mais, y]. A posição é a % somada aos px, e as duas andam
+// juntas, então o desenho chega exato à ponta em qualquer largura.
+type PontoLargo = [number, number, number, number]
+
+function trilha(pontos: PontoLargo[], dur: number, conteudo: string): string {
+  const f = (n: number) => +n.toFixed(4)
+  const tempos = pontos.map(p => f(p[0])).join(';')
+  const x = `<animate attributeName="x" values="${pontos.map(p => `${f(p[1])}%`).join(';')}" keyTimes="${tempos}" dur="${dur}s" repeatCount="indefinite"/>`
+  return `<svg x="${f(pontos[0]?.[1] ?? 0)}%" overflow="visible">${x}<g>${caminho(pontos.map(p => [p[0], p[2], p[3]]), dur)}${conteudo}</g></svg>`
+}
+
+// Parado num ponto da faixa larga.
+function em(porcento: number, px: number, y: number, conteudo: string): string {
+  return `<svg x="${porcento}%" overflow="visible"><g transform="translate(${px} ${y})">${conteudo}</g></svg>`
+}
+
+// Leva u de 0 a 1 para um ponto entre a e b, cada um [%, px].
+function entre(u: number, a: [number, number], b: [number, number]): [number, number] {
+  return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]
+}
+
+const chaoLinha = () => `<rect x="0.5%" y="${ALTURA - 2}" width="99%" height="1" fill="#e8a33d" opacity="0.25"/>`
 
 const CORPO = [
   '.......O...O.',
@@ -99,22 +123,24 @@ function saltos(t0: number, t1: number, x0: number, x1: number, alturas: number[
 function novelo(): string {
   const T = 9
   const chao = ALTURA - 2 - 22
-  const bola = [
-    [0, 44, 0],
-    [0.07, 44, 0],
-    ...saltos(0.07, 0.42, 44, 340, [17, 11, 6, 3]).slice(0),
-    [0.56, 340, 0],
-    ...saltos(0.57, 0.9, 340, 44, [14, 8, 4]).slice(0),
-    [1, 44, 0],
+  const A: [number, number] = [0, 44]
+  const B: [number, number] = [100, -40]
+  const bolaU = [
+    [0, 0, 0],
+    [0.07, 0, 0],
+    ...saltos(0.07, 0.42, 0, 1, [17, 11, 6, 3]),
+    [0.56, 1, 0],
+    ...saltos(0.57, 0.9, 1, 0, [14, 8, 4]),
+    [1, 0, 0],
   ] as [number, number, number][]
-  const gato: [number, number, number][] = [[0, 14, chao], [0.14, 14, chao], [0.46, 304, chao], [0.6, 304, chao], [0.94, 14, chao], [1, 14, chao]]
-  const novelo = `<g>${caminho(bola, T)}<circle cx="0" cy="${ALTURA - 7}" r="5" fill="#d94f8a"/><path d="M-3 ${ALTURA - 9}q3 3 6 0M-4 ${ALTURA - 6}q4 3 8 0" fill="none" stroke="#f6c4d9" stroke-width="1"/></g>`
+  const bola = bolaU.map(([t, u, y]): PontoLargo => [t, ...entre(u, A, B), y])
+  const gato = ([[0, 0], [0.14, 0], [0.46, 1], [0.6, 1], [0.94, 0], [1, 0]] as [number, number][]).map(([t, u]): PontoLargo => [t, ...entre(u, [0, 14], [100, -76]), chao])
+  const novelo = trilha(bola, T, `<circle cx="0" cy="${ALTURA - 7}" r="5" fill="#d94f8a"/><path d="M-3 ${ALTURA - 9}q3 3 6 0M-4 ${ALTURA - 6}q4 3 8 0" fill="none" stroke="#f6c4d9" stroke-width="1"/>`)
   const patinha = `<g>${visivel([[0.04, 0.09], [0.53, 0.58]], T)}${sprite(PATADA, 2)}</g>`
   const parado = `<g>${visivel([[0, 0.04], [0.09, 0.14], [0.46, 0.53], [0.58, 0.6], [0.94, 1]], T)}${sprite(SENTADO, 2)}</g>`
   const direita = `<g>${visivel([[0.14, 0.46]], T)}${passos('direita', 0.32)}</g>`
   const esquerda = `<g>${visivel([[0.6, 0.94]], T)}${passos('esquerda', 0.32)}</g>`
-  const chaoLinha = `<rect x="4" y="${ALTURA - 2}" width="${LARGURA - 8}" height="1" fill="#e8a33d" opacity="0.25"/>`
-  return chaoLinha + novelo + `<g>${caminho(gato, T)}${parado}${patinha}${direita}${esquerda}</g>`
+  return chaoLinha() + novelo + trilha(gato, T, parado + patinha + direita + esquerda)
 }
 
 const CABECA = [
@@ -136,13 +162,12 @@ function surgindo(): string {
   const ALTO = 4
   const pisca = '<animate attributeName="height" calcMode="discrete" values="6;2;6" keyTimes="0;0.9;0.96" dur="1.9s" repeatCount="indefinite"/>'
   const cabeca = (x: number, a: number, b: number) => {
-    const y = 0
-    const p: [number, number, number][] = [
-      [0, x, FORA], [a, x, FORA], [a + 0.04, x, 16], [a + 0.09, x, 16], [a + 0.13, x, ALTO], [b - 0.05, x, ALTO], [b, x, FORA], [1, x, FORA],
+    const p: PontoLargo[] = [
+      [0, x, -16, FORA], [a, x, -16, FORA], [a + 0.04, x, -16, 16], [a + 0.09, x, -16, 16], [a + 0.13, x, -16, ALTO], [b - 0.05, x, -16, ALTO], [b, x, -16, FORA], [1, x, -16, FORA],
     ]
-    return `<g>${caminho(p, T)}${sprite(CABECA, 3, 0, y)}<rect x="6" y="12" width="6" height="6" fill="${CORES.E}">${pisca}</rect><rect x="21" y="12" width="6" height="6" fill="${CORES.E}">${pisca}</rect></g>`
+    return trilha(p, T, `${sprite(CABECA, 3)}<rect x="6" y="12" width="6" height="6" fill="${CORES.E}">${pisca}</rect><rect x="21" y="12" width="6" height="6" fill="${CORES.E}">${pisca}</rect>`)
   }
-  return cabeca(50, 0.02, 0.3) + cabeca(185, 0.36, 0.64) + cabeca(320, 0.7, 0.97)
+  return cabeca(12, 0.02, 0.3) + cabeca(50, 0.36, 0.64) + cabeca(88, 0.7, 0.97)
 }
 
 const CINZA_LINHA = '#8a8f95'
@@ -181,9 +206,7 @@ export function desenharEsperando(cor: Cor = 'laranja', largura = 70, x = 4): st
 
 // Enviando o pedido: corre de uma ponta à outra.
 function correndo(): string {
-  const T = 3
-  const p: [number, number, number][] = [[0, 6, 8], [1, LARGURA - 34, 8]]
-  return `<g>${caminho(p, T)}${passos('direita', 0.24)}</g>`
+  return trilha([[0, 0, 6, 8], [1, 100, -34, 8]], 3, passos('direita', 0.24))
 }
 
 // Pensando: sentado, com bolinhas subindo até um balão de reticências.
@@ -192,14 +215,19 @@ function pensando(): string {
   const bola = (i: number, x: number, y: number, r: number) => surge(i, 5, `<circle cx="${x}" cy="${y}" r="${r}" fill="${CINZA_LINHA}"/>`, T)
   const balao = surge(2, 5, `<rect x="58" y="3" width="40" height="16" rx="7" fill="none" stroke="${CINZA_LINHA}" stroke-width="2"/>`, T)
   const pontos = [3, 4, 5].map((i, k) => surge(i, 5, `<rect x="${67 + k * 8}" y="10" width="4" height="3" fill="${CINZA_LINHA}"/>`, T)).join('')
-  return gatoSentado(14) + bola(0, 46, 20, 1.5) + bola(1, 52, 15, 2) + balao + pontos
+  // Na outra ponta, o mascote do Claude pensa junto, com a faísca girando em cima.
+  const faisca = `<g>${sprite(FAISCA, 2, -5, -5)}<animateTransform attributeName="transform" type="rotate" values="0;90" dur="1.2s" repeatCount="indefinite" additive="sum"/></g>`
+  const mascote = em(100, -45, Y_MASCOTE, mascoteParado() + `<g transform="translate(16 -8)">${faisca}</g>`)
+  return gatoSentado(14) + bola(0, 46, 20, 1.5) + bola(1, 52, 15, 2) + balao + pontos + mascote
 }
 
 // Respondendo: bate no teclado e o texto vai aparecendo.
 function digitando(): string {
   const T = 3.5
   const teclado = `<rect x="48" y="24" width="34" height="5" fill="${CINZA_LINHA}"/>`
-  const letras = Array.from({ length: 14 }, (_, i) => surge(i, 14, `<rect x="${92 + i * 12}" y="16" width="${i % 4 === 3 ? 4 : 9}" height="3" fill="${TINTA}"/>`, T)).join('')
+  // As letras vão de 92 px até perto da ponta direita, em qualquer largura.
+  const n = 32
+  const letras = Array.from({ length: n }, (_, i) => surge(i, n, em(...entre(i / (n - 1), [0, 92], [100, -12]).map(v => +v.toFixed(2)) as [number, number], 16, `<rect width="${i % 5 === 4 ? 3 : 8}" height="3" fill="${TINTA}"/>`), T)).join('')
   return gatoBatendo(14, 0.28) + teclado + letras
 }
 
@@ -211,34 +239,152 @@ function comando(): string {
     const b = +(((i + 1) / 3).toFixed(3))
     return `<rect x="${50 + i * 10}" y="20" width="7" height="7" fill="${CINZA_LINHA}"/><rect x="${50 + i * 10}" y="20" width="7" height="7" fill="${cor}" opacity="0">${visivel([[a === 0 ? 0 : a, b]], 0.9)}</rect>`
   }).join('')
-  const tela = `<rect x="88" y="4" width="130" height="25" fill="#16201e" stroke="${CINZA_LINHA}" stroke-width="2"/>`
-  const linhas = [[96, 9, 60], [96, 15, 96], [96, 21, 40]].map(([x, y, w], i) => surge(i, 3, `<rect x="${x}" y="${y}" width="${w}" height="2" fill="#35b87a"/>`, T)).join('')
-  return gatoBatendo(14, 0.3) + botoes + tela + linhas
+  // A tela fica pequena, ao lado do gatinho: as linhas do comando correm nela.
+  const tela = `<rect x="86" y="3" width="44" height="22" fill="#16201e" stroke="${CINZA_LINHA}" stroke-width="2"/><rect x="104" y="25" width="8" height="4" fill="${CINZA_LINHA}"/>`
+  const linhas = [[8, 24], [13, 32], [18, 14]].map(([y, w], i) => surge(i, 3, `<rect x="91" y="${y}" width="${w}" height="2" fill="#35b87a"/>`, T)).join('')
+  // Da tela sai uma esteira até a ponta direita. Os arquivos prontos, como builds, descem por ela até a caixa do fim.
+  const esteira = `<rect x="134" y="${ALTURA - 3}" height="2" fill="${CINZA_LINHA}" width="100" style="width:calc(100% - 134px - 34px)"/>`
+  const caixaFim = em(100, -32, 14, '<rect width="28" height="16" fill="#9c6b3f"/><rect width="28" height="3" fill="#c49a6c"/><rect x="12" width="4" height="16" fill="#c49a6c"/>')
+  const CORES_BUILD = ['#35b87a', '#e8c23d', '#5b8def', '#e0567f']
+  const VIAGEM = 4.8
+  const arquivos = CORES_BUILD.map((cor, i) => {
+    const comeco = `begin="-${(i * VIAGEM / CORES_BUILD.length).toFixed(2)}s"`
+    const x = `<animate attributeName="x" values="0%;0%;100%;100%" keyTimes="0;0.08;0.92;1" dur="${VIAGEM}s" ${comeco} repeatCount="indefinite"/>`
+    // Sai de dentro da tela subindo, anda na esteira e cai dentro da caixa.
+    const anda = `<animateTransform attributeName="transform" type="translate" values="118 10;136 ${ALTURA - 15};-26 ${ALTURA - 15};-26 ${ALTURA - 4}" keyTimes="0;0.08;0.92;1" dur="${VIAGEM}s" ${comeco} repeatCount="indefinite"/>`
+    const some = `<animate attributeName="opacity" calcMode="discrete" values="0;1;0" keyTimes="0;0.04;0.97" dur="${VIAGEM}s" ${comeco} repeatCount="indefinite"/>`
+    const arquivo = `<rect width="10" height="12" fill="#f4f1e8" stroke="${CINZA_LINHA}" stroke-width="1"/><rect x="0" y="0" width="10" height="3" fill="${cor}"/><rect x="2" y="6" width="6" height="1" fill="${CINZA_LINHA}"/><rect x="2" y="8" width="4" height="1" fill="${CINZA_LINHA}"/>`
+    return `<svg x="0%" overflow="visible">${x}<g opacity="0">${some}<g>${anda}${arquivo}</g></g></svg>`
+  }).join('')
+  return gatoBatendo(14, 0.3) + botoes + esteira + arquivos + tela + linhas + caixaFim
 }
 
 // Lendo ou buscando: anda entre as folhas, farejando cada uma.
 function lendo(): string {
   const T = 9
   const folha = (x: number) => `<rect x="${x}" y="11" width="15" height="19" fill="#f4f1e8" stroke="${CINZA_LINHA}" stroke-width="1"/><rect x="${x + 3}" y="15" width="9" height="1" fill="${CINZA_LINHA}"/><rect x="${x + 3}" y="19" width="9" height="1" fill="${CINZA_LINHA}"/><rect x="${x + 3}" y="23" width="6" height="1" fill="${CINZA_LINHA}"/>`
-  const folhas = [70, 150, 230, 310].map(folha).join('')
-  const anda: [number, number, number][] = [[0, 14, 8], [0.48, 340, 8], [0.52, 340, 8], [1, 14, 8]]
+  const folhas = [18, 34, 50, 66, 82].map(p => em(p, 0, 0, folha(0))).join('')
+  const anda: PontoLargo[] = [[0, 0, 14, 8], [0.48, 100, -40, 8], [0.52, 100, -40, 8], [1, 0, 14, 8]]
   const fareja = `<g fill="${CINZA_LINHA}"><rect x="28" y="12" width="2" height="2"/><rect x="32" y="9" width="2" height="2"/><animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;0.5" dur="0.6s" repeatCount="indefinite"/></g>`
   const direita = `<g>${visivel([[0, 0.5]], T)}${passos('direita', 0.4)}${fareja}</g>`
   const esquerda = `<g opacity="0">${visivel([[0.5, 1]], T)}${passos('esquerda', 0.4)}</g>`
-  return folhas + `<g>${caminho(anda, T)}${direita}${esquerda}</g>`
+  return folhas + trilha(anda, T, direita + esquerda)
 }
 
 // Editando ou criando arquivo: rabisca uma linha com o lápis.
 function editando(): string {
-  const T = 6
-  const n = 23
-  const passo = 14
-  const pontos = Array.from({ length: n + 1 }, (_, i): [number, number] => [48 + i * passo, i % 2 === 0 ? 24 : 16])
-  const tamanho = +(n * Math.hypot(passo, 8)).toFixed(1)
-  const risco = `<polyline points="${pontos.map(p => p.join(',')).join(' ')}" fill="none" stroke="${TINTA}" stroke-width="2" stroke-dasharray="${tamanho}" stroke-dashoffset="${tamanho}" shape-rendering="auto"><animate attributeName="stroke-dashoffset" values="${tamanho};0;0" keyTimes="0;0.9;1" dur="${T}s" repeatCount="indefinite"/></polyline>`
-  const percurso: [number, number, number][] = [...pontos.map((p, i): [number, number, number] => [(i / n) * 0.9, p[0], p[1]]), [1, pontos[n]![0], pontos[n]![1]]]
-  const lapis = `<g>${caminho(percurso, T)}<rect x="0" y="-10" width="3" height="9" fill="#e8c23d"/><rect x="0" y="-11" width="3" height="2" fill="#e0567f"/><rect x="1" y="-1" width="1" height="1" fill="#2b1a0a"/></g>`
-  return gatoBatendo(14, 0.4) + risco + lapis
+  const T = 8
+  const n = 36
+  // O risco vai de 48 px até 8 px antes da ponta. Cada ponto é [%, px]: o mesmo para o risco e para o lápis.
+  const ponto = (i: number): [number, number] => entre(i / n, [0, 48], [100, -8])
+  const y = (i: number) => (i % 2 === 0 ? 24 : 16)
+  // Uma linha não mistura % e px nas pontas: o risco é feito de pontinhos, e cada um aparece quando o lápis passa.
+  const POR_TRECHO = 6
+  const tracos = Array.from({ length: n * POR_TRECHO }, (_, k) => {
+    const u = k / POR_TRECHO
+    const i = Math.floor(u)
+    const [p, x] = ponto(u)
+    const yy = y(i) + (y(i + 1) - y(i)) * (u - i)
+    const a = +((u / n) * 0.9 + 0.001).toFixed(4)
+    return `<g opacity="0">${visivel([[a, 1]], T)}${em(+p.toFixed(3), +x.toFixed(2), +(yy - 1).toFixed(2), `<rect width="2" height="2" fill="${TINTA}"/>`)}</g>`
+  }).join('')
+  const percurso: PontoLargo[] = [...Array.from({ length: n + 1 }, (_, i): PontoLargo => [(i / n) * 0.9, ...ponto(i), y(i)]), [1, ...ponto(n), y(n)]]
+  const lapis = trilha(percurso, T, '<rect x="0" y="-10" width="3" height="9" fill="#e8c23d"/><rect x="0" y="-11" width="3" height="2" fill="#e0567f"/><rect x="1" y="-1" width="1" height="1" fill="#2b1a0a"/>')
+  return gatoBatendo(14, 0.4) + tracos + lapis
+}
+
+// O mascote do Claude em pixel: corpo laranja, dois olhos, bracinhos dos lados e quatro perninhas. 33 x 18 em pixels de 3.
+const MASCOTE_CORPO = [
+  '..CCCCCCC..',
+  '..CECCCEC..',
+  'CCCCCCCCCCC',
+  '..CCCCCCC..',
+  '..CCCCCCC..',
+]
+const MASCOTE_A = [...MASCOTE_CORPO, '..C.C.C.C..']
+const MASCOTE_B = [...MASCOTE_CORPO, '.C.C...C.C.']
+const ALTO_MASCOTE = 18
+const Y_MASCOTE = ALTURA - 2 - ALTO_MASCOTE
+
+function mascoteParado(): string {
+  const olhos = `<g fill="#d97757" opacity="0"><rect x="9" y="3" width="3" height="3"/><rect x="21" y="3" width="3" height="3"/><animate attributeName="opacity" calcMode="discrete" values="0;1;0" keyTimes="0;0.9;0.96" dur="2.3s" repeatCount="indefinite"/></g>`
+  return sprite(MASCOTE_A, 3) + olhos
+}
+
+function mascoteAndando(dur: number): string {
+  const a = `<g>${sprite(MASCOTE_A, 3)}<animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;0.5" dur="${dur}s" repeatCount="indefinite"/></g>`
+  const b = `<g opacity="0">${sprite(MASCOTE_B, 3, 0, -1)}<animate attributeName="opacity" calcMode="discrete" values="0;1" keyTimes="0;0.5" dur="${dur}s" repeatCount="indefinite"/></g>`
+  return a + b
+}
+
+// A faísca laranja do Claude.
+const FAISCA = ['..S..', 'S.S.S', '.SSS.', 'S.S.S', '..S..']
+const EXCLAMACAO = ['P', 'P', 'P', '.', 'P']
+const CORACAO = ['.PP.PP.', 'PPPPPPP', 'PPPPPPP', '.PPPPP.', '..PPP..', '...P...']
+
+// O mascote atravessa a faixa com o gatinho atrás; na ponta, leva um susto e é a vez dele de correr atrás.
+function perseguicao(): string {
+  const T = 9
+  const ida = 0.42
+  const pausa = 0.52
+  const linear = (pts: [number, number, number][], y: number): PontoLargo[] => pts.map(([t, p, x]) => [t, p, x, y])
+  const mascote = linear([[0, 0, 40], [ida, 100, -40], [pausa, 100, -40], [0.96, 0, 40], [1, 0, 40]], Y_MASCOTE)
+  const gato = linear([[0, 0, -30], [ida, 100, -80], [pausa, 100, -80], [0.96, 0, -30], [1, 0, -30]], 8)
+  const susto = `<g opacity="0">${visivel([[ida + 0.01, pausa]], T)}${sprite(EXCLAMACAO, 2, 15, -12)}</g>`
+  const corpoMascote = `<g>${visivel([[0, ida], [pausa, 1]], T)}${mascoteAndando(0.3)}</g><g opacity="0">${visivel([[ida, pausa]], T)}${mascoteParado()}</g>${susto}`
+  const gatoDireita = `<g>${visivel([[0, ida]], T)}${passos('direita', 0.28)}</g>`
+  const gatoSentado2 = `<g opacity="0">${visivel([[ida, pausa]], T)}${sprite(SENTADO, 2)}</g>`
+  const gatoEsquerda = `<g opacity="0">${visivel([[pausa, 1]], T)}${passos('esquerda', 0.22)}</g>`
+  return chaoLinha() + trilha(gato, T, gatoDireita + gatoSentado2 + gatoEsquerda) + trilha(mascote, T, corpoMascote)
+}
+
+// O mascote pula de caixa em caixa até a ponta e volta, com faíscas piscando no alto.
+function pulando(): string {
+  const T = 10
+  // Cada parada: [%, px, altura da caixa]. As caixas ficam nas paradas do meio.
+  const paradas: [number, number, number][] = [[0, 6, 0], [18, 0, 4], [36, 0, 7], [54, 0, 5], [72, 0, 8], [100, -40, 0]]
+  const caixas = paradas.filter(p => p[2] > 0).map(([p, x, h]) => em(p, x - 1, ALTURA - 2 - h, `<rect width="35" height="${h}" fill="#9c6b3f"/><rect width="35" height="2" fill="#c49a6c"/>`)).join('')
+  const topo = (h: number) => Y_MASCOTE - h
+  const pulos = (lista: [number, number, number][], t0: number, t1: number): PontoLargo[] => {
+    const pts: PontoLargo[] = []
+    const n = lista.length - 1
+    for (let i = 0; i < n; i++) {
+      const [pa, xa, ha] = lista[i]!
+      const [pb, xb, hb] = lista[i + 1]!
+      // Fica um pouco parado em cada caixa antes de pular.
+      const ta = t0 + (t1 - t0) * (i / n)
+      const tb = t0 + (t1 - t0) * ((i + 1) / n)
+      const tp = ta + (tb - ta) * 0.35
+      pts.push([ta, pa, xa, topo(ha)], [tp, pa, xa, topo(ha)])
+      for (let k = 1; k < 8; k++) {
+        const u = k / 8
+        const [p, x] = entre(u, [pa, xa], [pb, xb])
+        pts.push([tp + (tb - tp) * u, p, x, topo(ha + (hb - ha) * u) - 6 * 4 * u * (1 - u)])
+      }
+    }
+    const ult = lista[n]!
+    pts.push([t1, ult[0], ult[1], topo(ult[2])])
+    return pts
+  }
+  const caminhoTodo = [...pulos(paradas, 0, 0.46), ...pulos([...paradas].reverse(), 0.5, 0.96), [1, 0, 6, topo(0)] as PontoLargo]
+  const faiscas = [10, 27, 45, 63, 81, 93].map((p, i) => {
+    const a = +((i * 0.15) % 0.9).toFixed(3)
+    return `<g opacity="0">${visivel([[a, +(a + 0.12).toFixed(3)]], 2.4)}${em(p, 0, 1, sprite(FAISCA, 2))}</g>`
+  }).join('')
+  return chaoLinha() + caixas + faiscas + trilha(caminhoTodo, T, mascoteParado())
+}
+
+// O gatinho e o mascote vêm das pontas, se encontram no meio, sobe um coração, e cada um volta para o seu lado.
+function encontro(): string {
+  const T = 9
+  const chega = 0.38
+  const sai = 0.62
+  const mascote: PontoLargo[] = [[0, 100, -40, Y_MASCOTE], [chega, 50, 6, Y_MASCOTE], [sai, 50, 6, Y_MASCOTE], [1, 100, -40, Y_MASCOTE]]
+  const gato: PontoLargo[] = [[0, 0, 6, 8], [chega, 50, -32, 8], [sai, 50, -32, 8], [1, 0, 6, 8]]
+  const coracao = `<g opacity="0">${visivel([[chega + 0.03, sai - 0.02]], T)}${trilha([[0, 50, -7, 10], [chega, 50, -7, 10], [sai, 50, -7, -2], [1, 50, -7, -2]], T, sprite(CORACAO, 2))}</g>`
+  const gatoAnda = `<g>${visivel([[0, chega]], T)}${passos('direita', 0.3)}</g><g opacity="0">${visivel([[chega, sai]], T)}${sprite(SENTADO, 2)}</g><g opacity="0">${visivel([[sai, 1]], T)}${passos('esquerda', 0.3)}</g>`
+  const mascoteAnda = `<g>${visivel([[0, chega], [sai, 1]], T)}${mascoteAndando(0.3)}</g><g opacity="0">${visivel([[chega, sai]], T)}${mascoteParado()}</g>`
+  return chaoLinha() + trilha(gato, T, gatoAnda) + trilha(mascote, T, mascoteAnda) + coracao
 }
 
 // As pequenas, para a linha de status: em pixel, 80 por 32.
@@ -344,10 +490,11 @@ export function animacaoDe(modo: string, ferramenta: string | null, sorteada: No
   return 'comando'
 }
 
-const DESENHOS: Record<Nome, () => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo }
+const DESENHOS: Record<Nome, () => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo, perseguicao, pulando, encontro }
 
+// Sem viewBox e com largura 100%: a faixa ocupa a linha toda, e o pixel fica com o mesmo tamanho em qualquer largura.
 export function desenhar(nome: Nome, cor: Cor = 'laranja'): string {
-  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${LARGURA} ${ALTURA}" width="${LARGURA}" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome]()}</svg>`, cor)
+  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome]()}</svg>`, cor)
 }
 
 // Sorteia outra, nunca a mesma de agora; a semente vem de fora para o teste poder fixá-la.
