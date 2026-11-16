@@ -2,6 +2,8 @@
 // A faixa tem 32 de altura: a linha do app não passa de cerca de 32 e encolhe o desenho que passar.
 // Na largura, a faixa ocupa a linha toda: as posições vão em porcentagem. LARGURA é só a referência da faixa da pergunta.
 export const LARGURA = 400
+// A largura que a faixa pede ao app; ele corta no tamanho da linha.
+export const LARGURA_MAXIMA = 4000
 export const ALTURA = 32
 export const NOMES = ['correndo', 'pensando', 'digitando', 'comando', 'lendo', 'editando', 'novelo', 'surgindo', 'perseguicao', 'pulando', 'encontro'] as const
 export type Nome = (typeof NOMES)[number]
@@ -17,7 +19,7 @@ export function pintar(svg: string, cor: Cor): string {
   return Object.entries(TONS_CINZA).reduce((s, [de, para]) => s.split(de).join(para), svg)
 }
 
-const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e', M: '#a0703f', H: '#6e4a2a', N: '#3a2616', L: '#f08a24', F: '#4caf50', G: '#8a96a3', K: '#16201e', V: '#8b6cd9', W: '#ffffff', U: '#4b3399', Y: '#e8c23d' }
+const CORES: Record<string, string> = { O: '#e8a33d', D: '#b5701f', E: '#2b1a0a', P: '#e0567f', B: '#f4dcae', T: '#c98a2e', M: '#a0703f', H: '#6e4a2a', N: '#3a2616', L: '#f08a24', F: '#4caf50', G: '#8a96a3', K: '#16201e', V: '#8b6cd9', W: '#ffffff', U: '#4b3399', Y: '#e8c23d', Q: '#35b87a' }
 
 // Desenha linhas de texto como pixels; cada letra é uma cor, ponto é vazio.
 function sprite(linhas: string[], c: number, x0 = 0, y0 = 0): string {
@@ -231,8 +233,8 @@ function digitando(): string {
   return gatoBatendo(14, 0.28) + teclado + letras
 }
 
-// Rodando comando: aperta botões, e as linhas saem na tela.
-function comando(): string {
+// Rodando comando: aperta botões, e as linhas saem na tela. O companheiro fica em cima da caixa do fim, esperando os arquivos.
+function comando(c: Companheiro): string {
   const T = 3
   const botoes = ['#35b87a', '#e8c23d', '#e0567f'].map((cor, i) => {
     const a = +((i / 3).toFixed(3))
@@ -244,7 +246,9 @@ function comando(): string {
   const linhas = [[8, 24], [13, 32], [18, 14]].map(([y, w], i) => surge(i, 3, `<rect x="91" y="${y}" width="${w}" height="2" fill="#35b87a"/>`, T)).join('')
   // Da tela sai uma esteira até a ponta direita. Os arquivos prontos, como builds, descem por ela até a caixa do fim.
   const esteira = `<rect x="134" y="${ALTURA - 3}" height="2" fill="${CINZA_LINHA}" width="100" style="width:calc(100% - 134px - 34px)"/>`
-  const caixaFim = em(100, -32, 14, '<rect width="28" height="16" fill="#9c6b3f"/><rect width="28" height="3" fill="#c49a6c"/><rect x="12" width="4" height="16" fill="#c49a6c"/>')
+  // A caixa é baixa para o companheiro caber em cima dela, nos 32 de altura.
+  const caixaFim = em(100, -32, 20, '<rect width="28" height="10" fill="#9c6b3f"/><rect width="28" height="3" fill="#c49a6c"/><rect x="12" width="4" height="10" fill="#c49a6c"/>')
+  const vigia = em(100, -32 + Math.round((28 - c.largura) / 2), 20 - c.altura, espelharSe(c, c.parado()))
   const CORES_BUILD = ['#35b87a', '#e8c23d', '#5b8def', '#e0567f']
   const VIAGEM = 4.8
   const arquivos = CORES_BUILD.map((cor, i) => {
@@ -256,11 +260,11 @@ function comando(): string {
     const arquivo = `<rect width="10" height="12" fill="#f4f1e8" stroke="${CINZA_LINHA}" stroke-width="1"/><rect x="0" y="0" width="10" height="3" fill="${cor}"/><rect x="2" y="6" width="6" height="1" fill="${CINZA_LINHA}"/><rect x="2" y="8" width="4" height="1" fill="${CINZA_LINHA}"/>`
     return `<svg x="0%" overflow="visible">${x}<g opacity="0">${some}<g>${anda}${arquivo}</g></g></svg>`
   }).join('')
-  return gatoBatendo(14, 0.3) + botoes + esteira + arquivos + tela + linhas + caixaFim
+  return gatoBatendo(14, 0.3) + botoes + esteira + arquivos + tela + linhas + caixaFim + vigia
 }
 
-// Lendo ou buscando: anda entre as folhas, farejando cada uma.
-function lendo(): string {
+// Lendo ou buscando: anda entre as folhas, farejando cada uma. O companheiro anda no sentido contrário, e os dois se cruzam.
+function lendo(c: Companheiro): string {
   const T = 9
   const folha = (x: number) => `<rect x="${x}" y="11" width="15" height="19" fill="#f4f1e8" stroke="${CINZA_LINHA}" stroke-width="1"/><rect x="${x + 3}" y="15" width="9" height="1" fill="${CINZA_LINHA}"/><rect x="${x + 3}" y="19" width="9" height="1" fill="${CINZA_LINHA}"/><rect x="${x + 3}" y="23" width="6" height="1" fill="${CINZA_LINHA}"/>`
   const folhas = [18, 34, 50, 66, 82].map(p => em(p, 0, 0, folha(0))).join('')
@@ -268,15 +272,19 @@ function lendo(): string {
   const fareja = `<g fill="${CINZA_LINHA}"><rect x="28" y="12" width="2" height="2"/><rect x="32" y="9" width="2" height="2"/><animate attributeName="opacity" calcMode="discrete" values="1;0" keyTimes="0;0.5" dur="0.6s" repeatCount="indefinite"/></g>`
   const direita = `<g>${visivel([[0, 0.5]], T)}${passos('direita', 0.4)}${fareja}</g>`
   const esquerda = `<g opacity="0">${visivel([[0.5, 1]], T)}${passos('esquerda', 0.4)}</g>`
-  return folhas + trilha(anda, T, direita + esquerda)
+  const y = yDe(c)
+  const fim = -c.largura - 6
+  const outro: PontoLargo[] = [[0, 100, fim, y], [0.48, 0, 44, y], [0.52, 0, 44, y], [1, 100, fim, y]]
+  const outroAnda = `<g>${visivel([[0, 0.5]], T)}${c.andando(0.4, 'esquerda')}</g><g opacity="0">${visivel([[0.5, 1]], T)}${c.andando(0.4, 'direita')}</g>`
+  return folhas + trilha(outro, T, outroAnda) + trilha(anda, T, direita + esquerda)
 }
 
-// Editando ou criando arquivo: rabisca uma linha com o lápis.
-function editando(): string {
+// Editando ou criando arquivo: rabisca uma linha com o lápis. O companheiro espera na ponta e aprova quando o lápis chega.
+function editando(c: Companheiro): string {
   const T = 8
   const n = 36
-  // O risco vai de 48 px até 8 px antes da ponta. Cada ponto é [%, px]: o mesmo para o risco e para o lápis.
-  const ponto = (i: number): [number, number] => entre(i / n, [0, 48], [100, -8])
+  // O risco vai de 48 px até a frente do companheiro. Cada ponto é [%, px]: o mesmo para o risco e para o lápis.
+  const ponto = (i: number): [number, number] => entre(i / n, [0, 48], [100, -c.largura - 16])
   const y = (i: number) => (i % 2 === 0 ? 24 : 16)
   // Uma linha não mistura % e px nas pontas: o risco é feito de pontinhos, e cada um aparece quando o lápis passa.
   const POR_TRECHO = 6
@@ -290,7 +298,9 @@ function editando(): string {
   }).join('')
   const percurso: PontoLargo[] = [...Array.from({ length: n + 1 }, (_, i): PontoLargo => [(i / n) * 0.9, ...ponto(i), y(i)]), [1, ...ponto(n), y(n)]]
   const lapis = trilha(percurso, T, '<rect x="0" y="-10" width="3" height="9" fill="#e8c23d"/><rect x="0" y="-11" width="3" height="2" fill="#e0567f"/><rect x="1" y="-1" width="1" height="1" fill="#2b1a0a"/>')
-  return gatoBatendo(14, 0.4) + tracos + lapis
+  const certo = `<g opacity="0">${visivel([[0.9, 1]], T)}${sprite(['.....Q', '....Q.', 'Q..Q..', '.QQ...'], 2, c.largura / 2 - 6, -10)}</g>`
+  const juiz = em(100, -c.largura - 6, yDe(c), espelharSe(c, c.parado()) + certo)
+  return gatoBatendo(14, 0.4) + tracos + lapis + juiz
 }
 
 // Os companheiros do gatinho: desenhos nossos, sorteados a cada pedido para a faixa variar.
@@ -585,9 +595,26 @@ export function animacaoDe(modo: string, ferramenta: string | null, sorteada: No
 
 const DESENHOS: Record<Nome, (c: Companheiro) => string> = { correndo, pensando, digitando, comando, lendo, editando, novelo, surgindo, perseguicao, pulando, encontro }
 
-// Sem viewBox e com largura 100%: a faixa ocupa a linha toda, e o pixel fica com o mesmo tamanho em qualquer largura.
-export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara'): string {
-  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="${ALTURA}" shape-rendering="crispEdges">${DESENHOS[nome](QUEM[companheiro])}</svg>`, cor)
+// O app mede a largura pelo atributo width: sem número, ele usa 300 (o padrão de imagem). O atributo grande faz o app abrir
+// a linha toda; o style 100% faz o desenho caber nela. Sem viewBox, o pixel fica com o mesmo tamanho em qualquer largura.
+//
+// O app não desenha um Svg mais largo que uns 448 px (medido em 16/11/2026: a cena parava em 448 numa linha de 1150).
+// Por isso a faixa vai em pedaços lado a lado. Cada pedaço desenha a cena inteira dentro de um svg interno com a largura
+// de todos os pedaços juntos, deslocado para a esquerda: as porcentagens da cena valem para a linha toda.
+export type Parte = { indice: number; total: number }
+
+export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara', parte?: Parte): string {
+  const cena = DESENHOS[nome](QUEM[companheiro])
+  const dentro = parte ? `<svg x="${-parte.indice * 100}%" y="0" width="${parte.total * 100}%" height="${ALTURA}">${cena}</svg>` : cena
+  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="${LARGURA_MAXIMA}" height="${ALTURA}" style="width:100%" shape-rendering="crispEdges">${dentro}</svg>`, cor)
+}
+
+// Quantos pedaços a faixa precisa para nenhum passar da largura que o app desenha. A conta parte das colunas que o app
+// informa, com folga (9 px por coluna); só valem totais que dividem 100, para a porcentagem de cada pedaço ser exata.
+export const LARGURA_DO_PEDACO = 448
+export function pedacosDaFaixa(colunas: number | undefined): number {
+  const largura = (colunas ?? 0) * 9
+  return [4, 5, 10].find(n => largura <= n * LARGURA_DO_PEDACO) ?? 10
 }
 
 // O companheiro da vez: troca a cada pedido, junto com a cena.

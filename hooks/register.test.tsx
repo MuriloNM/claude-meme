@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ALTURA, COMPANHEIROS, LARGURA, LARGURA_PEQUENA, NOMES, PEQUENAS_PIXEL, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, companheiroDe } from './animacoes'
+import { ALTURA, COMPANHEIROS, LARGURA, LARGURA_PEQUENA, NOMES, PEQUENAS_PIXEL, animacaoDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, companheiroDe, pedacosDaFaixa } from './animacoes'
 import { acharProgramas, nomesParaInstalar, pastasAtuais } from './programas'
 import { FERRAMENTA_GUARDAR, comandoDePreparo, pedidoDeAdicionar } from './receita'
 import { ACOES, ACOES_PADRAO, LIMITE_DESENHO, LIMITE_PREVIAS_POR_TELA, acaoDe, acoesValidas, dividirEmTelas, ehGif, escolherMeme, escolherPixel, nomeValido, quemNaPergunta, svgDoGif, svgNaPergunta } from './sorteio'
@@ -69,10 +69,24 @@ test('na pergunta revezam o gatinho e os memes preparados para isso', () => {
   expect(quemNaPergunta(lista, 2)).toBe(null)
 })
 
+test('a faixa vai em pedaços que juntos ocupam a linha toda', () => {
+  expect(pedacosDaFaixa(undefined)).toBe(4)
+  expect(pedacosDaFaixa(150)).toBe(4)
+  expect(pedacosDaFaixa(240)).toBe(5)
+  expect(pedacosDaFaixa(400)).toBe(10)
+  for (const nome of NOMES) {
+    const pedaco = desenhar(nome, 'laranja', 'capivara', { indice: 2, total: 4 })
+    expect(pedaco).toContain(`<svg x="-200%" y="0" width="400%" height="${ALTURA}">`)
+    expect(pedaco).toContain(`height="${ALTURA}" style="width:100%"`)
+    expect(pedaco.length).toBeLessThan(LIMITE_DESENHO)
+  }
+  expect(desenhar('correndo', 'laranja', 'capivara')).not.toContain('width="400%"')
+})
+
 test('as animações em pixel têm o tamanho certo e animam', () => {
   for (const nome of NOMES) for (const quem of COMPANHEIROS) {
     const svg = desenhar(nome, 'laranja', quem)
-    expect(svg).toContain(`width="100%" height="${ALTURA}"`)
+    expect(svg).toContain(`height="${ALTURA}" style="width:100%"`)
     expect(svg).toContain('<animate')
     expect(svg).not.toContain('NaN')
     expect(svg.length).toBeLessThan(LIMITE_DESENHO)

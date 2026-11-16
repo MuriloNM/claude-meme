@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { ALTURA, CORES_GATO, LARGURA, LARGURA_PEQUENA, animacaoDe, companheiroDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, sortear } from './animacoes'
+import { ALTURA, CORES_GATO, LARGURA, LARGURA_PEQUENA, animacaoDe, companheiroDe, desenhar, desenharEsperando, desenharPequena, faseDaFaixa, pedacosDaFaixa, sortear } from './animacoes'
 import type { Cor, Nome } from './animacoes'
 import { acharProgramas, nomesParaInstalar } from './programas'
 import type { Programas } from './programas'
@@ -388,11 +388,22 @@ export const register: Register = on => {
     if (f === 'AskUserQuestion') {
       return next(e)
     }
-    const { Svg } = $.ui.resolve(e)
+    const { Box, Svg } = $.ui.resolve(e)
     const nome = animacaoDe(faseDaFaixa(f, ultimaFase), f, await read($, atual), null)
+    const corAtual = await read($, cor)
+    const companheiro = companheiroDe(await read($, semente))
 
-    // Sem largura: a faixa ocupa a linha toda.
-    return <Svg source={desenhar(nome, await read($, cor), companheiroDe(await read($, semente)))} alt={`Animação ${nome}`} height={ALTURA} isInteractive />
+    // O app corta um Svg largo, então a faixa vai em pedaços que juntos ocupam a linha toda (ver desenhar).
+    const total = pedacosDaFaixa(e.viewport?.columns)
+    return (
+      <Box flexDirection="row" width="100%">
+        {Array.from({ length: total }, (_, indice) => (
+          <Box key={`pedaco-${indice}`} width={`${100 / total}%`}>
+            <Svg source={desenhar(nome, corAtual, companheiro, { indice, total })} alt={`Animação ${nome}, parte ${indice + 1} de ${total}`} height={ALTURA} isInteractive />
+          </Box>
+        ))}
+      </Box>
+    )
   })
 
   // O painel: os memes da pessoa, com o que tirar e quando aparecer, e as sugestões que ainda não entraram.
