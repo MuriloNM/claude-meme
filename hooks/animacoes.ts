@@ -597,8 +597,24 @@ const DESENHOS: Record<Nome, (c: Companheiro) => string> = { correndo, pensando,
 
 // O app mede a largura pelo atributo width: sem número, ele usa 300 (o padrão de imagem). O atributo grande faz o app abrir
 // a linha toda; o style 100% faz o desenho caber nela. Sem viewBox, o pixel fica com o mesmo tamanho em qualquer largura.
-export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara'): string {
-  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="${LARGURA_MAXIMA}" height="${ALTURA}" style="width:100%" shape-rendering="crispEdges">${DESENHOS[nome](QUEM[companheiro])}</svg>`, cor)
+//
+// O app não desenha um Svg mais largo que uns 448 px (medido em 16/11/2026: a cena parava em 448 numa linha de 1150).
+// Por isso a faixa vai em pedaços lado a lado. Cada pedaço desenha a cena inteira dentro de um svg interno com a largura
+// de todos os pedaços juntos, deslocado para a esquerda: as porcentagens da cena valem para a linha toda.
+export type Parte = { indice: number; total: number }
+
+export function desenhar(nome: Nome, cor: Cor = 'laranja', companheiro: NomeCompanheiro = 'capivara', parte?: Parte): string {
+  const cena = DESENHOS[nome](QUEM[companheiro])
+  const dentro = parte ? `<svg x="${-parte.indice * 100}%" y="0" width="${parte.total * 100}%" height="${ALTURA}">${cena}</svg>` : cena
+  return pintar(`<svg xmlns="http://www.w3.org/2000/svg" width="${LARGURA_MAXIMA}" height="${ALTURA}" style="width:100%" shape-rendering="crispEdges">${dentro}</svg>`, cor)
+}
+
+// Quantos pedaços a faixa precisa para nenhum passar da largura que o app desenha. A conta parte das colunas que o app
+// informa, com folga (9 px por coluna); só valem totais que dividem 100, para a porcentagem de cada pedaço ser exata.
+export const LARGURA_DO_PEDACO = 448
+export function pedacosDaFaixa(colunas: number | undefined): number {
+  const largura = (colunas ?? 0) * 9
+  return [4, 5, 10].find(n => largura <= n * LARGURA_DO_PEDACO) ?? 10
 }
 
 // O companheiro da vez: troca a cada pedido, junto com a cena.
